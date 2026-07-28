@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 // Edge-compatible: no fs / child_process / ffmpeg.
-// Client splits long audio into ≤90s WAV parts under 24 MiB.
+// Client splits long audio into ≤10min WAV parts under 24 MiB.
 
 const MAX_BYTES = 24 * 1024 * 1024;
 const MAX_RETRIES = 4;
-const TIMEOUT_MS = 90_000;
+const TIMEOUT_MS = 180_000;
 
 type Segment = { start: number; end: number; text: string };
 
