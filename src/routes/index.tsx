@@ -1,6 +1,22 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useRef, useState } from "react";
-import { Mic, Square, Upload, Copy, Check, Loader2, Trash2, Download, Sparkles, FileSearch } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Mic,
+  Square,
+  Upload,
+  Copy,
+  Check,
+  Loader2,
+  Trash2,
+  Download,
+  Sparkles,
+  FileSearch,
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  Gauge,
+} from "lucide-react";
 import { encodeWav } from "@/lib/wav";
 import { toSrt, toTxt, downloadText } from "@/lib/subtitles";
 import { prepareAudioForTranscription, DEFAULT_PART_MINUTES, clampPartMinutes } from "@/lib/splitAudio";
@@ -33,10 +49,14 @@ const MODELS = [
   { id: "whisper-large-v3-turbo", label: "سریع (whisper-large-v3-turbo)" },
 ];
 
+const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+const SKIP_SECONDS = 10;
+
 const CLIENT_TIMEOUT_MS = 240_000;
 const CLIENT_RETRIES = 4;
 
 function formatTime(sec: number) {
+  if (!Number.isFinite(sec) || sec < 0) sec = 0;
   const m = Math.floor(sec / 60).toString().padStart(2, "0");
   const s = Math.floor(sec % 60).toString().padStart(2, "0");
   return `${m}:${s}`;
@@ -144,12 +164,58 @@ function Index() {
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [analysisCopied, setAnalysisCopied] = useState(false);
 
+  // Audio player state
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [playbackRate, setPlaybackRate] = useState(1);
+
   const audioCtxRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const nodeRef = useRef<ScriptProcessorNode | null>(null);
   const chunksRef = useRef<Float32Array[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const playerRef = useRef<HTMLAudioElement | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
+
+  const revokeAudioUrl = useCallback(() => {
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+    setAudioUrl(null);
+    setPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+  }, []);
+
+  const setSourceFromBlob = useCallback(
+    (blob: Blob) => {
+      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+      const url = URL.createObjectURL(blob);
+      audioUrlRef.current = url;
+      setAudioUrl(url);
+      setPlaying(false);
+      setCurrentTime(0);
+      setDuration(0);
+      setPlaybackRate(1);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    const el = playerRef.current;
+    if (!el) return;
+    el.playbackRate = playbackRate;
+  }, [playbackRate, audioUrl]);
 
   const cancelJob = useCallback(() => {
     abortRef.current?.abort();
@@ -162,11 +228,39 @@ function Index() {
     setAnalysisError(null);
   }, []);
 
+  const togglePlay = useCallback(() => {
+    const el = playerRef.current;
+    if (!el || !audioUrl) return;
+    if (el.paused) {
+      void el.play().catch(() => setPlaying(false));
+    } else {
+      el.pause();
+    }
+  }, [audioUrl]);
+
+  const skip = useCallback((delta: number) => {
+    const el = playerRef.current;
+    if (!el) return;
+    const next = Math.max(0, Math.min(el.duration || 0, el.currentTime + delta));
+    el.currentTime = next;
+    setCurrentTime(next);
+  }, []);
+
+  const seekTo = useCallback((time: number) => {
+    const el = playerRef.current;
+    if (!el) return;
+    const next = Math.max(0, Math.min(el.duration || 0, time));
+    el.currentTime = next;
+    setCurrentTime(next);
+  }, []);
+
   const send = useCallback(
     async (blob: Blob, name: string) => {
       cancelJob();
       const ac = new AbortController();
       abortRef.current = ac;
+
+      setSourceFromBlob(blob);
 
       setLoading(true);
       setError(null);
@@ -262,7 +356,7 @@ function Index() {
         if (abortRef.current === ac) abortRef.current = null;
       }
     },
-    [model, partMinutes, cancelJob, clearAnalysis],
+    [model, partMinutes, cancelJob, clearAnalysis, setSourceFromBlob],
   );
 
   const runAnalysis = useCallback(
@@ -368,6 +462,8 @@ function Index() {
     downloadText(toSrt(segments), `${baseName}.srt`, "application/x-subrip");
   };
 
+  const progressValue = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
+
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-8 px-5 py-12">
       <header className="text-center">
@@ -447,6 +543,97 @@ function Index() {
         </div>
       </section>
 
+      {audioUrl && (
+        <section className="panel p-5 sm:p-6">
+          <audio
+            ref={playerRef}
+            src={audioUrl}
+            preload="metadata"
+            onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
+            onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime || 0)}
+            onPlay={() => setPlaying(true)}
+            onPause={() => setPlaying(false)}
+            onEnded={() => setPlaying(false)}
+            className="hidden"
+          />
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h2 className="text-sm font-bold text-muted-foreground">پخش صوت{fileName ? ` — ${fileName}` : ""}</h2>
+            <div className="flex items-center gap-2 text-sm">
+              <Gauge className="size-3.5 text-muted-foreground" />
+              <select
+                value={playbackRate}
+                onChange={(e) => setPlaybackRate(Number(e.target.value))}
+                className="rounded-lg border border-border bg-card px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-ring"
+                title="سرعت پخش"
+              >
+                {PLAYBACK_RATES.map((r) => (
+                  <option key={r} value={r}>{r === 1 ? "۱× عادی" : `${r}×`}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="mb-2 flex items-center gap-3 text-xs font-mono text-muted-foreground">
+            <span>{formatTime(currentTime)}</span>
+            <input
+              type="range"
+              min={0}
+              max={duration || 0}
+              step={0.1}
+              value={Math.min(currentTime, duration || 0)}
+              onChange={(e) => seekTo(Number(e.target.value))}
+              className="h-2 flex-1 cursor-pointer accent-primary"
+              aria-label="موقعیت پخش"
+            />
+            <span>{formatTime(duration)}</span>
+          </div>
+
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary transition-[width] duration-100"
+              style={{ width: `${progressValue}%` }}
+            />
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => skip(-SKIP_SECONDS)}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-secondary"
+              title={`${SKIP_SECONDS} ثانیه عقب`}
+            >
+              <SkipBack className="size-4" />
+              {SKIP_SECONDS}ث
+            </button>
+            <button
+              type="button"
+              onClick={togglePlay}
+              className="inline-flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90"
+              aria-label={playing ? "توقف" : "پخش"}
+            >
+              {playing ? <Pause className="size-5" /> : <Play className="size-5 mr-[-2px]" />}
+            </button>
+            <button
+              type="button"
+              onClick={() => skip(SKIP_SECONDS)}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-secondary"
+              title={`${SKIP_SECONDS} ثانیه جلو`}
+            >
+              {SKIP_SECONDS}ث
+              <SkipForward className="size-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => seekTo(0)}
+              className="inline-flex items-center rounded-xl border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-secondary"
+              title="از ابتدا"
+            >
+              از ابتدا
+            </button>
+          </div>
+        </section>
+      )}
+
       {loading && (
         <div className="panel flex flex-col items-center justify-center gap-3 p-8 text-muted-foreground">
           <div className="flex items-center gap-3">
@@ -510,6 +697,8 @@ function Index() {
                     setText("");
                     setSegments([]);
                     clearAnalysis();
+                    revokeAudioUrl();
+                    setFileName(null);
                   }}
                   className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary"
                 >
@@ -537,9 +726,16 @@ function Index() {
               </summary>
               <ul className="mt-3 space-y-2">
                 {segments.map((s, i) => (
-                  <li key={i} className="flex gap-3 rounded-xl bg-surface p-3 text-sm">
-                    <span className="shrink-0 font-mono text-xs text-muted-foreground">{formatTime(s.start)}</span>
-                    <span className="leading-7">{s.text}</span>
+                  <li key={i}>
+                    <button
+                      type="button"
+                      onClick={() => seekTo(s.start)}
+                      className="flex w-full gap-3 rounded-xl bg-surface p-3 text-right text-sm transition-colors hover:bg-secondary"
+                      title="پرش به این بخش"
+                    >
+                      <span className="shrink-0 font-mono text-xs text-muted-foreground">{formatTime(s.start)}</span>
+                      <span className="leading-7">{s.text}</span>
+                    </button>
                   </li>
                 ))}
               </ul>
