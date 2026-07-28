@@ -230,7 +230,25 @@ function Index() {
         <section className="panel p-6 sm:p-8">
           <div className="mb-4 flex items-center justify-between gap-3">
             <h2 className="text-lg font-bold">متن پیاده‌شده</h2>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
+              {segments.length > 0 && (
+                <>
+                  <button
+                    onClick={() => downloadSubtitle("srt")}
+                    className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary"
+                  >
+                    <Download className="size-4" />
+                    SRT
+                  </button>
+                  <button
+                    onClick={() => downloadSubtitle("vtt")}
+                    className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary"
+                  >
+                    <Download className="size-4" />
+                    VTT
+                  </button>
+                </>
+              )}
               <button
                 onClick={copy}
                 className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
