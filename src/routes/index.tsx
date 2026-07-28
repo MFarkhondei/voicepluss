@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useRef, useState } from "react";
 import { Mic, Square, Upload, Copy, Check, Loader2, FileAudio, Trash2, Download } from "lucide-react";
 import { encodeWav } from "@/lib/wav";
-import { toSrt, toVtt, downloadText } from "@/lib/subtitles";
+import { toSrt, toVtt, toTxt, downloadText } from "@/lib/subtitles";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -137,7 +137,12 @@ function Index() {
 
   const baseName = (fileName ?? "transcript").replace(/\.[^.]+$/, "") || "transcript";
 
-  const downloadSubtitle = (kind: "srt" | "vtt") => {
+  const downloadSubtitle = (kind: "srt" | "vtt" | "txt") => {
+    if (kind === "txt") {
+      if (!text) return;
+      downloadText(toTxt(text), `${baseName}.txt`, "text/plain");
+      return;
+    }
     if (segments.length === 0) return;
     const content = kind === "srt" ? toSrt(segments) : toVtt(segments);
     downloadText(
@@ -249,6 +254,13 @@ function Index() {
                   </button>
                 </>
               )}
+              <button
+                onClick={() => downloadSubtitle("txt")}
+                className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary"
+              >
+                <Download className="size-4" />
+                TXT
+              </button>
               <button
                 onClick={copy}
                 className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
