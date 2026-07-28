@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useRef, useState } from "react";
 import { Mic, Square, Upload, Copy, Check, Loader2, Trash2, Download, Sparkles } from "lucide-react";
 import { encodeWav } from "@/lib/wav";
-import { toSrt, toVtt, toTxt, downloadText } from "@/lib/subtitles";
+import { toSrt, toTxt, downloadText } from "@/lib/subtitles";
 import { prepareAudioForTranscription, DEFAULT_PART_MINUTES, clampPartMinutes } from "@/lib/splitAudio";
 
 export const Route = createFileRoute("/")({
@@ -351,19 +351,14 @@ function Index() {
 
   const baseName = (fileName ?? "transcript").replace(/\.[^.]+$/, "") || "transcript";
 
-  const downloadSubtitle = (kind: "srt" | "vtt" | "txt") => {
+  const downloadSubtitle = (kind: "srt" | "txt") => {
     if (kind === "txt") {
       if (!text) return;
       downloadText(toTxt(text), `${baseName}.txt`, "text/plain");
       return;
     }
     if (segments.length === 0) return;
-    const content = kind === "srt" ? toSrt(segments) : toVtt(segments);
-    downloadText(
-      content,
-      `${baseName}.${kind}`,
-      kind === "srt" ? "application/x-subrip" : "text/vtt",
-    );
+    downloadText(toSrt(segments), `${baseName}.srt`, "application/x-subrip");
   };
 
   return (
@@ -479,14 +474,9 @@ function Index() {
             </h2>
             <div className="flex flex-wrap justify-end gap-2">
               {segments.length > 0 && !loading && (
-                <>
-                  <button onClick={() => downloadSubtitle("srt")} className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary">
-                    <Download className="size-4" /> SRT
-                  </button>
-                  <button onClick={() => downloadSubtitle("vtt")} className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary">
-                    <Download className="size-4" /> VTT
-                  </button>
-                </>
+                <button onClick={() => downloadSubtitle("srt")} className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary">
+                  <Download className="size-4" /> SRT
+                </button>
               )}
               {!loading && (
                 <button onClick={() => downloadSubtitle("txt")} className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary">
