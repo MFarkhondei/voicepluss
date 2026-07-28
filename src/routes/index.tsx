@@ -32,7 +32,7 @@ const MODELS = [
   { id: "whisper-large-v3-turbo", label: "سریع (whisper-large-v3-turbo)" },
 ];
 
-const CLIENT_TIMEOUT_MS = 90_000;
+const CLIENT_TIMEOUT_MS = 180_000; // 3 min per 10-min part
 const CLIENT_RETRIES = 4;
 
 function formatTime(sec: number) {
@@ -466,7 +466,7 @@ function Index() {
       )}
 
       <footer className="mt-auto pt-4 text-center text-xs text-muted-foreground">
-        فایل‌ها فقط برای پردازش ارسال می‌شوند. صوت‌های طولانی به بخش‌های ۹۰ ثانیه‌ای تقسیم می‌شوند.
+        فایل‌ها فقط برای پردازش ارسال می‌شوند. صوت‌های طولانی به بخش‌های ۱۰ دقیقه‌ای تقسیم می‌شوند.
       </footer>
     </main>
   );
