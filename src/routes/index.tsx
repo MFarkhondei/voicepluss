@@ -255,6 +255,13 @@ function Index() {
                 </>
               )}
               <button
+                onClick={() => downloadSubtitle("txt")}
+                className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary"
+              >
+                <Download className="size-4" />
+                TXT
+              </button>
+              <button
                 onClick={copy}
                 className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
               >
