@@ -33,10 +33,15 @@ export function toVtt(segments: Segment[]) {
   );
 }
 
-export function toTxt(text: string) {
-  return text.trim() + "\n";
+/** هر جمله در یک خط، بدون زمان */
+export function toTxt(segments: Segment[]) {
+  return (
+    segments
+      .map((seg) => seg.text.trim())
+      .filter(Boolean)
+      .join("\n") + "\n"
+  );
 }
-
 
 export function downloadText(content: string, filename: string, mime: string) {
   const blob = new Blob(["\ufeff" + content], { type: `${mime};charset=utf-8` });
