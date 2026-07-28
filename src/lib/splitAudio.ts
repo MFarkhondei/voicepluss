@@ -4,13 +4,12 @@ import { encodeWav } from "./wav";
 
 export const MAX_UPLOAD_BYTES = 24 * 1024 * 1024; // 24 MiB (Groq limit)
 
-// Keep parts short so serverless / proxy timeouts don't kill the request.
-// 16 kHz mono 16-bit PCM ≈ 32_000 bytes/s → 90s ≈ 2.9 MiB
-export const PART_SECONDS = 90;
+// 16 kHz mono 16-bit PCM ≈ 32_000 bytes/s → 10 min ≈ 19 MiB (under 24 MiB limit)
+export const PART_SECONDS = 10 * 60; // 10 minutes
 const TARGET_RATE = 16_000;
 
 // If decoded duration exceeds this, always split (even when file size is small).
-export const MAX_SINGLE_DURATION_SEC = 90;
+export const MAX_SINGLE_DURATION_SEC = 10 * 60;
 
 export type AudioPart = {
   blob: Blob;
