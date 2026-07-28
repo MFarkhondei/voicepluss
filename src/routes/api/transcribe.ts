@@ -2,10 +2,12 @@ import { createFileRoute } from "@tanstack/react-router";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { spawnSync, spawn } from "child_process";
+import { spawnSync } from "child_process";
 import ffmpegPath from "ffmpeg-static";
 
 const MAX_BYTES = 24 * 1024 * 1024;
+const DEFAULT_MAX_RETRIES = 5;
+const DEFAULT_TIMEOUT_MS = 180_000; // 3 minutes per-part
 
 function uniqueTmp(prefix = "transcribe") {
   return path.join(os.tmpdir(), `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}`);
@@ -13,13 +15,13 @@ function uniqueTmp(prefix = "transcribe") {
 
 async function runFfmpeg(args: string[], cwd?: string) {
   return new Promise<{ code: number; stdout: string; stderr: string }>((resolve, reject) => {
-    const p = spawn(ffmpegPath as string, args, { cwd });
+    const p = require("child_process").spawn(ffmpegPath as string, args, { cwd });
     let stdout = "";
     let stderr = "";
-    p.stdout?.on("data", (d) => (stdout += d.toString()));
-    p.stderr?.on("data", (d) => (stderr += d.toString()));
-    p.on("error", (err) => reject(err));
-    p.on("close", (code) => resolve({ code: code ?? 0, stdout, stderr }));
+    p.stdout?.on("data", (d: any) => (stdout += d.toString()));
+    p.stderr?.on("data", (d: any) => (stderr += d.toString()));
+    p.on("error", (err: any) => reject(err));
+    p.on("close", (code: number) => resolve({ code: code ?? 0, stdout, stderr }));
   });
 }
 
@@ -28,15 +30,15 @@ async function transcribePart(
   fname: string,
   apiKey: string,
   model: string,
-  maxRetries = 3,
-  timeoutMs = 60_000
+  maxRetries = DEFAULT_MAX_RETRIES,
+  timeoutMs = DEFAULT_TIMEOUT_MS
 ) {
   let lastErr: any = null;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
+      console.log(`[transcribePart] attempt ${attempt + 1}/${maxRetries} for ${fname}`);
       const chunkBuf = fs.readFileSync(partPath);
       const upstream = new FormData();
-      // In node runtimes FormData/Blob are available in the server runtime used by this project.
       upstream.append("file", new Blob([chunkBuf]), fname);
       upstream.append("model", model);
       upstream.append("language", "fa");
@@ -46,21 +48,22 @@ async function transcribePart(
       const controller = new AbortController();
       const id = setTimeout(() => controller.abort(), timeoutMs);
       try {
+        const started = Date.now();
         const res = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
           method: "POST",
           headers: { Authorization: `Bearer ${apiKey}` },
           body: upstream as any,
           signal: controller.signal,
         });
+        const took = Date.now() - started;
         clearTimeout(id);
 
         if (!res.ok) {
           const detail = await res.text().catch(() => "");
+          console.warn(`[transcribePart] non-ok response for ${fname}: ${res.status} (${took}ms) - ${detail.slice(0,500)}`);
           lastErr = new Error(`status ${res.status}: ${detail.slice(0, 500)}`);
-          // If it's a 4xx client error, don't retry
           if (res.status >= 400 && res.status < 500) break;
-          // otherwise retry
-          const backoff = 1000 * Math.pow(2, attempt);
+          const backoff = 2000 * Math.pow(2, attempt);
           await new Promise((r) => setTimeout(r, backoff));
           continue;
         }
@@ -71,18 +74,20 @@ async function transcribePart(
           segments?: { start: number; end: number; text: string }[];
         };
 
+        console.log(`[transcribePart] success for ${fname} (${took}ms)`);
         return { success: true, data };
       } finally {
         try { clearTimeout(id); } catch {};
       }
     } catch (err) {
+      console.warn(`[transcribePart] error for ${fname} on attempt ${attempt + 1}:`, String(err));
       lastErr = err;
-      // If aborted, treat as retryable
-      const backoff = 1000 * Math.pow(2, attempt);
+      const backoff = 2000 * Math.pow(2, attempt);
       await new Promise((r) => setTimeout(r, backoff));
       continue;
     }
   }
+  console.error(`[transcribePart] failed after ${maxRetries} attempts for ${fname}:`, String(lastErr));
   return { success: false, error: String(lastErr) };
 }
 
@@ -101,7 +106,8 @@ export const Route = createFileRoute("/api/transcribe")({
         let form: FormData;
         try {
           form = await request.formData();
-        } catch {
+        } catch (e) {
+          console.error('[transcribe] invalid formData', String(e));
           return Response.json({ error: "درخواست نامعتبر است." }, { status: 400 });
         }
 
@@ -111,8 +117,8 @@ export const Route = createFileRoute("/api/transcribe")({
         }
 
         const model = String(form.get("model") || "whisper-large-v3");
+        console.log(`[transcribe] incoming file=${String(file.name)} size=${file.size} model=${model}`);
 
-        // If file fits under the limit, just forward it to Groq as before.
         if (file.size <= MAX_BYTES) {
           const upstream = new FormData();
           upstream.append("file", file, file.name || "recording.wav");
@@ -132,6 +138,7 @@ export const Route = createFileRoute("/api/transcribe")({
 
           if (!res.ok) {
             const detail = await res.text().catch(() => "");
+            console.warn(`[transcribe] upstream non-ok ${res.status} - ${detail.slice(0,500)}`);
             return Response.json(
               { error: `خطای سرویس Groq (${res.status})`, detail: detail.slice(0, 500) },
               { status: res.status },
@@ -144,14 +151,14 @@ export const Route = createFileRoute("/api/transcribe")({
             segments?: { start: number; end: number; text: string }[];
           };
 
-          const textFromSegments = (data.segments ?? []).map((s) => s.text.trim()).join(" ").trim();
+          const textFromSegments = (data.segments ?? []).map((s: any) => s.text.trim()).join(" ").trim();
           const finalText = (data.text?.trim() || textFromSegments) ?? "";
 
           return Response.json({
             text: finalText,
             duration: data.duration ?? null,
             segments:
-              data.segments?.map((s) => ({
+              data.segments?.map((s: any) => ({
                 start: s.start,
                 end: s.end,
                 text: s.text.trim(),
@@ -159,27 +166,29 @@ export const Route = createFileRoute("/api/transcribe")({
           });
         }
 
-        // If file is too large, try to split it with ffmpeg, transcribe parts and merge results.
         if (!ffmpegPath) {
+          console.error('[transcribe] ffmpeg not available');
           return Response.json(
             { error: "فایل بیش از حد بزرگ است و ffmpeg برای تقسیم وجود ندارد. لطفا فایل را کوچکتر کنید." },
             { status: 400 },
           );
         }
 
-        // write uploaded file to temp
         const tmpIn = (uniqueTmp("in-") + path.extname(file.name || "")) || "";
         try {
           const buf = Buffer.from(await file.arrayBuffer());
           fs.writeFileSync(tmpIn, buf);
+          const stat = fs.statSync(tmpIn);
+          console.log(`[transcribe] wrote tmp file ${tmpIn} (${stat.size} bytes)`);
         } catch (err) {
-          console.error("failed to write temp input", err);
+          console.error("[transcribe] failed to write temp input", err);
           return Response.json({ error: "خطا در ذخیره موقت فایل." }, { status: 500 });
         }
 
-        // get duration by parsing ffmpeg -i output
+        console.log(`[transcribe] probing duration via ffmpeg: ${ffmpegPath} -i ${tmpIn}`);
         const probe = spawnSync(ffmpegPath as string, ["-i", tmpIn]);
         const probeStderr = String(probe.stderr ?? "");
+        console.log(`[transcribe] ffmpeg probe stderr (truncated): ${probeStderr.slice(0, 1000)}`);
         const durationMatch = probeStderr.match(/Duration:\s(\d+):(\d+):(\d+\.\d+)/);
         let durationSeconds = 0;
         if (durationMatch) {
@@ -188,13 +197,13 @@ export const Route = createFileRoute("/api/transcribe")({
           const s = Number(durationMatch[3]);
           durationSeconds = h * 3600 + m * 60 + s;
         } else {
-          // Fallback: estimate based on size by assuming worst-case 16-bit PCM 16kHz mono
-          // 32000 bytes/sec
           durationSeconds = Math.max(1, Math.floor(Buffer.byteLength(fs.readFileSync(tmpIn)) / 32000));
+          console.log(`[transcribe] probe failed, estimated durationSeconds=${durationSeconds}`);
         }
 
         const partsCount = Math.max(1, Math.ceil(file.size / MAX_BYTES));
         const partDuration = Math.max(1, Math.ceil(durationSeconds / partsCount));
+        console.log(`[transcribe] partsCount=${partsCount}, partDuration=${partDuration}s`);
 
         const tmpDir = uniqueTmp("parts-") + ".d";
         fs.mkdirSync(tmpDir, { recursive: true });
@@ -202,19 +211,20 @@ export const Route = createFileRoute("/api/transcribe")({
         const ext = path.extname(file.name) || ".wav";
         const outPattern = path.join(tmpDir, `part-%03d${ext}`);
 
-        // run ffmpeg to split into segments of partDuration seconds
         const ffArgs = ["-i", tmpIn, "-f", "segment", "-segment_time", String(partDuration), "-c", "copy", outPattern];
+        console.log(`[transcribe] running ffmpeg split: ${ffArgs.join(" ")}`);
         const runRes = await runFfmpeg(ffArgs);
+        console.log(`[transcribe] ffmpeg split exit=${runRes.code} stderr (truncated): ${runRes.stderr.slice(0,1000)}`);
         if (runRes.code !== 0) {
-          console.error("ffmpeg split failed", runRes.stderr);
-          // attempt a re-encode split as fallback (re-encode to WAV then split)
+          console.warn("[transcribe] ffmpeg split failed, attempting re-encode and split", runRes.stderr.slice(0,1000));
           const reEncoded = tmpIn + ".wav";
+          console.log(`[transcribe] re-encoding to WAV: -i ${tmpIn} -ar 16000 -ac 1 -c:a pcm_s16le ${reEncoded}`);
           const reEnc = await runFfmpeg(["-i", tmpIn, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", reEncoded]);
+          console.log(`[transcribe] re-encode exit=${reEnc.code} stderr (truncated): ${reEnc.stderr.slice(0,1000)}`);
           if (reEnc.code !== 0) {
-            console.error("ffmpeg re-encode failed", reEnc.stderr);
+            console.error("[transcribe] ffmpeg re-encode failed", reEnc.stderr);
             return Response.json({ error: "خطا در تقسیم فایل با ffmpeg." }, { status: 500 });
           }
-          // try splitting the re-encoded WAV
           const outPattern2 = path.join(tmpDir, `part-%03d.wav`);
           const split2 = await runFfmpeg(["-i", reEncoded, "-f", "segment", "-segment_time", String(partDuration), "-c", "copy", outPattern2]);
           if (split2.code !== 0) {
@@ -223,8 +233,8 @@ export const Route = createFileRoute("/api/transcribe")({
           }
         }
 
-        // read parts
         const files = fs.readdirSync(tmpDir).filter((f) => f.startsWith("part-")).sort();
+        console.log(`[transcribe] found ${files.length} parts`);
         if (files.length === 0) {
           try { fs.rmSync(tmpIn, { force: true }); } catch {};
           return Response.json({ error: "بخش‌بندی فایل ناموفق بود." }, { status: 500 });
@@ -238,10 +248,11 @@ export const Route = createFileRoute("/api/transcribe")({
           const fname = files[i];
           const partPath = path.join(tmpDir, fname);
 
-          const resPart = await transcribePart(partPath, fname, apiKey, model, 3, 60_000);
+          console.log(`[transcribe] transcribing part ${i + 1}/${files.length}: ${fname}`);
+          const resPart = await transcribePart(partPath, fname, apiKey, model, DEFAULT_MAX_RETRIES, DEFAULT_TIMEOUT_MS);
           if (!resPart.success) {
             failedParts.push({ part: fname, error: resPart.error });
-            // skip adding text/segments for this part and continue
+            console.warn(`[transcribe] part failed: ${fname} -> ${resPart.error}`);
             continue;
           }
 
@@ -262,7 +273,6 @@ export const Route = createFileRoute("/api/transcribe")({
           allSegments.push(...segs);
         }
 
-        // cleanup
         try {
           fs.rmSync(tmpIn, { force: true });
         } catch {}
@@ -276,6 +286,7 @@ export const Route = createFileRoute("/api/transcribe")({
           result.failed = failedParts;
         }
 
+        console.log(`[transcribe] finished. parts=${files.length} failed=${failedParts.length}`);
         return Response.json(result);
       },
     },
