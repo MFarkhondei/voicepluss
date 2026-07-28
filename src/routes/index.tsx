@@ -8,17 +8,17 @@ import { prepareAudioForTranscription, DEFAULT_PART_MINUTES, clampPartMinutes } 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "تبدیل صوت به متن فارسی | مبتنی بر Groq" },
+      { title: "VoicePluss | تبدیل صوت به متن فارسی" },
       {
         name: "description",
         content:
-          "ضبط یا آپلود فایل صوتی و دریافت متن فارسی دقیق در چند ثانیه با موتور Whisper روی زیرساخت پرسرعت Groq.",
+          "VoicePluss — ضبط یا آپلود فایل صوتی و دریافت متن فارسی دقیق با موتور Whisper روی زیرساخت Groq.",
       },
-      { property: "og:title", content: "تبدیل صوت به متن فارسی | مبتنی بر Groq" },
+      { property: "og:title", content: "VoicePluss | تبدیل صوت به متن فارسی" },
       {
         property: "og:description",
         content:
-          "ضبط یا آپلود فایل صوتی و دریافت متن فارسی دقیق در چند ثانیه با موتور Whisper روی زیرساخت پرسرعت Groq.",
+          "VoicePluss — ضبط یا آپلود فایل صوتی و دریافت متن فارسی دقیق با موتور Whisper روی زیرساخت Groq.",
       },
     ],
   }),
@@ -327,10 +327,10 @@ function Index() {
         <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5 text-xs font-medium text-muted-foreground">
           <FileAudio className="size-3.5" /> موتور Whisper روی زیرساخت Groq
         </span>
-        <h1 className="mt-5 text-4xl font-black tracking-tight sm:text-5xl">تبدیل گفتار به متن فارسی</h1>
+        <h1 className="mt-5 text-4xl font-black tracking-tight sm:text-5xl">VoicePluss</h1>
         <p className="mx-auto mt-4 max-w-xl text-base leading-8 text-muted-foreground">
-          صدایتان را ضبط کنید یا یک فایل صوتی بفرستید. فایل‌های طولانی به‌صورت خودکار به
-          بخش‌های کوتاه تقسیم و متن‌ها ادغام می‌شوند.
+          VoicePluss — ضبط یا آپلود فایل صوتی و دریافت متن فارسی دقیق. فایل‌های طولانی
+          به‌صورت خودکار تقسیم و متن‌ها ادغام می‌شوند.
         </p>
       </header>
 
@@ -490,7 +490,7 @@ function Index() {
       )}
 
       <footer className="mt-auto pt-4 text-center text-xs text-muted-foreground">
-        فایل‌ها فقط برای پردازش ارسال می‌شوند. صوت‌های طولانی طبق «طول هر بخش» تقسیم می‌شوند (پیش‌فرض ۲ دقیقه).
+        VoicePluss — فایل‌ها فقط برای پردازش ارسال می‌شوند. صوت‌های طولانی طبق «طول هر بخش» تقسیم می‌شوند (پیش‌فرض ۲ دقیقه).
       </footer>
     </main>
   );
