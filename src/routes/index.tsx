@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useRef, useState } from "react";
-import { Mic, Square, Upload, Copy, Check, Loader2, Trash2, Download, Sparkles } from "lucide-react";
+import { Mic, Square, Upload, Copy, Check, Loader2, Trash2, Download, Sparkles, FileSearch } from "lucide-react";
 import { encodeWav } from "@/lib/wav";
 import { toSrt, toTxt, downloadText } from "@/lib/subtitles";
 import { prepareAudioForTranscription, DEFAULT_PART_MINUTES, clampPartMinutes } from "@/lib/splitAudio";
@@ -26,6 +26,7 @@ export const Route = createFileRoute("/")({
 });
 
 type Segment = { start: number; end: number; text: string };
+type AnalysisMode = "quick" | "full";
 
 const MODELS = [
   { id: "whisper-large-v3", label: "دقت بالا (whisper-large-v3)" },
@@ -57,8 +58,7 @@ async function transcribeOne(
     if (signal?.aborted) throw new Error("عملیات لغو شد.");
 
     const form = new FormData();
-    form.append("file", blob, name);
-    form.append("model", model);
+    form.append("file", blob, namen    form.append("model", model);
 
     const controller = new AbortController();
     const onAbort = () => controller.abort();
@@ -138,6 +138,7 @@ function Index() {
   const [partMinutes, setPartMinutes] = useState(DEFAULT_PART_MINUTES);
   const [copied, setCopied] = useState(false);
   const [analysis, setAnalysis] = useState<string | null>(null);
+  const [analysisMode, setAnalysisMode] = useState<AnalysisMode | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [analysisCopied, setAnalysisCopied] = useState(false);
@@ -156,6 +157,7 @@ function Index() {
 
   const clearAnalysis = useCallback(() => {
     setAnalysis(null);
+    setAnalysisMode(null);
     setAnalysisError(null);
   }, []);
 
@@ -262,33 +264,37 @@ function Index() {
     [model, partMinutes, cancelJob, clearAnalysis],
   );
 
-  const runAnalysis = useCallback(async () => {
-    const payload = text.trim();
-    if (!payload || analyzing) return;
-    setAnalyzing(true);
-    setAnalysisError(null);
-    try {
-      const res = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: payload }),
-      });
-      let data: any;
+  const runAnalysis = useCallback(
+    async (mode: AnalysisMode = "quick") => {
+      const payload = text.trim();
+      if (!payload || analyzing) return;
+      setAnalyzing(true);
+      setAnalysisError(null);
       try {
-        data = await res.json();
-      } catch {
-        throw new Error(`پاسخ نامعتبر از سرور (کد ${res.status})`);
+        const res = await fetch("/api/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: payload, mode }),
+        });
+        let data: any;
+        try {
+          data = await res.json();
+        } catch {
+          throw new Error(`پاسخ نامعتبر از سرور (کد ${res.status})`);
+        }
+        if (!res.ok) {
+          throw new Error(data?.error || `خطا در تحلیل (${res.status})`);
+        }
+        setAnalysis((data.analysis as string) || "");
+        setAnalysisMode((data.mode as AnalysisMode) || mode);
+      } catch (e) {
+        setAnalysisError(e instanceof Error ? e.message : "خطای ناشناخته در تحلیل");
+      } finally {
+        setAnalyzing(false);
       }
-      if (!res.ok) {
-        throw new Error(data?.error || `خطا در تحلیل (${res.status})`);
-      }
-      setAnalysis((data.analysis as string) || "");
-    } catch (e) {
-      setAnalysisError(e instanceof Error ? e.message : "خطای ناشناخته در تحلیل");
-    } finally {
-      setAnalyzing(false);
-    }
-  }, [text, analyzing]);
+    },
+    [text, analyzing],
+  );
 
   const stopRecording = useCallback(async () => {
     setRecording(false);
@@ -485,7 +491,7 @@ function Index() {
               )}
               {!loading && (
                 <button
-                  onClick={() => void runAnalysis()}
+                  onClick={() => void runAnalysis("quick")}
                   disabled={analyzing || !text.trim()}
                   className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary disabled:opacity-50"
                 >
@@ -549,19 +555,28 @@ function Index() {
 
       {analysis && (
         <section className="panel p-6 sm:p-8">
-          <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="flex items-center gap-2 text-lg font-bold">
               <Sparkles className="size-5 text-primary" />
-              تحلیل متن
+              {analysisMode === "full" ? "گزارش تحلیل کامل" : "تحلیل متن"}
             </h2>
             <div className="flex flex-wrap justify-end gap-2">
               <button
-                onClick={() => void runAnalysis()}
+                onClick={() => void runAnalysis("quick")}
                 disabled={analyzing || !text.trim()}
                 className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary disabled:opacity-50"
               >
                 {analyzing ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-                تحلیل مجدد
+                تحلیل سریع
+              </button>
+              <button
+                onClick={() => void runAnalysis("full")}
+                disabled={analyzing || !text.trim()}
+                className="inline-flex items-center gap-2 rounded-xl border border-primary/40 bg-primary/10 px-3.5 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/15 disabled:opacity-50"
+                title="بررسی بخش‌به‌بخش و گزارش کامل"
+              >
+                {analyzing ? <Loader2 className="size-4 animate-spin" /> : <FileSearch className="size-4" />}
+                تحلیل کامل
               </button>
               <button
                 onClick={copyAnalysis}
