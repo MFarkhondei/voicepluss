@@ -164,7 +164,6 @@ function Index() {
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [analysisCopied, setAnalysisCopied] = useState(false);
 
-  // Audio player state
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -191,19 +190,16 @@ function Index() {
     setDuration(0);
   }, []);
 
-  const setSourceFromBlob = useCallback(
-    (blob: Blob) => {
-      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
-      const url = URL.createObjectURL(blob);
-      audioUrlRef.current = url;
-      setAudioUrl(url);
-      setPlaying(false);
-      setCurrentTime(0);
-      setDuration(0);
-      setPlaybackRate(1);
-    },
-    [],
-  );
+  const setSourceFromBlob = useCallback((blob: Blob) => {
+    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+    const url = URL.createObjectURL(blob);
+    audioUrlRef.current = url;
+    setAudioUrl(url);
+    setPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setPlaybackRate(1);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -462,8 +458,6 @@ function Index() {
     downloadText(toSrt(segments), `${baseName}.srt`, "application/x-subrip");
   };
 
-  const progressValue = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
-
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-8 px-5 py-12">
       <header className="text-center">
@@ -573,8 +567,12 @@ function Index() {
             </div>
           </div>
 
-          <div className="mb-2 flex items-center gap-3 text-xs font-mono text-muted-foreground">
-            <span>{formatTime(currentTime)}</span>
+          {/* dir=ltr: نوار از چپ پر می‌شود حتی در صفحهٔ RTL */}
+          <div
+            dir="ltr"
+            className="mb-1 flex items-center gap-3 text-xs font-mono text-muted-foreground"
+          >
+            <span className="w-10 shrink-0 tabular-nums">{formatTime(currentTime)}</span>
             <input
               type="range"
               min={0}
@@ -585,14 +583,7 @@ function Index() {
               className="h-2 flex-1 cursor-pointer accent-primary"
               aria-label="موقعیت پخش"
             />
-            <span>{formatTime(duration)}</span>
-          </div>
-
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-primary transition-[width] duration-100"
-              style={{ width: `${progressValue}%` }}
-            />
+            <span className="w-10 shrink-0 text-end tabular-nums">{formatTime(duration)}</span>
           </div>
 
           <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
