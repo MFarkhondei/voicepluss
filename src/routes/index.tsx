@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useRef, useState } from "react";
-import { Mic, Square, Upload, Copy, Check, Loader2, FileAudio, Trash2 } from "lucide-react";
+import { Mic, Square, Upload, Copy, Check, Loader2, FileAudio, Trash2, Download } from "lucide-react";
 import { encodeWav } from "@/lib/wav";
+import { toSrt, toVtt, downloadText } from "@/lib/subtitles";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -134,6 +135,20 @@ function Index() {
     setTimeout(() => setCopied(false), 1600);
   };
 
+  const baseName = (fileName ?? "transcript").replace(/\.[^.]+$/, "") || "transcript";
+
+  const downloadSubtitle = (kind: "srt" | "vtt") => {
+    if (segments.length === 0) return;
+    const content = kind === "srt" ? toSrt(segments) : toVtt(segments);
+    downloadText(
+      content,
+      `${baseName}.${kind}`,
+      kind === "srt" ? "application/x-subrip" : "text/vtt",
+    );
+  };
+
+
+
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-8 px-5 py-12">
       <header className="text-center">
@@ -215,7 +230,25 @@ function Index() {
         <section className="panel p-6 sm:p-8">
           <div className="mb-4 flex items-center justify-between gap-3">
             <h2 className="text-lg font-bold">متن پیاده‌شده</h2>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
+              {segments.length > 0 && (
+                <>
+                  <button
+                    onClick={() => downloadSubtitle("srt")}
+                    className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary"
+                  >
+                    <Download className="size-4" />
+                    SRT
+                  </button>
+                  <button
+                    onClick={() => downloadSubtitle("vtt")}
+                    className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary"
+                  >
+                    <Download className="size-4" />
+                    VTT
+                  </button>
+                </>
+              )}
               <button
                 onClick={copy}
                 className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
