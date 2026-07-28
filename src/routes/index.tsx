@@ -33,7 +33,7 @@ const MODELS = [
   { id: "whisper-large-v3-turbo", label: "سریع (whisper-large-v3-turbo)" },
 ];
 
-const CLIENT_TIMEOUT_MS = 240_000; // up to ~4 min per part (covers longer chunks)
+const CLIENT_TIMEOUT_MS = 240_000;
 const CLIENT_RETRIES = 4;
 
 function formatTime(sec: number) {
@@ -58,7 +58,8 @@ async function transcribeOne(
     if (signal?.aborted) throw new Error("عملیات لغو شد.");
 
     const form = new FormData();
-    form.append("file", blob, namen    form.append("model", model);
+    form.append("file", blob, name);
+    form.append("model", model);
 
     const controller = new AbortController();
     const onAbort = () => controller.abort();
