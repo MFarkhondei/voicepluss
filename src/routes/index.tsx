@@ -183,6 +183,7 @@ function Index() {
   const playerRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
   const activeCardRef = useRef<HTMLLIElement | null>(null);
+  const listRef = useRef<HTMLUListElement | null>(null);
 
   const revokeAudioUrl = useCallback(() => {
     if (audioUrlRef.current) {
@@ -238,11 +239,13 @@ function Index() {
     return -1;
   }, [segments, currentTime]);
 
-  const activeSegment = activeSegmentIndex >= 0 ? segments[activeSegmentIndex] : null;
-
+  // کارت فعال را به ابتدای محدودهٔ اسکرول لیست ببر
   useEffect(() => {
     if (activeSegmentIndex < 0) return;
-    activeCardRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    const list = listRef.current;
+    const card = activeCardRef.current;
+    if (!list || !card) return;
+    list.scrollTo({ top: Math.max(0, card.offsetTop - list.offsetTop), behavior: "smooth" });
   }, [activeSegmentIndex]);
 
   const cancelJob = useCallback(() => {
@@ -770,16 +773,6 @@ function Index() {
               </button>
             </div>
 
-            {activeSegment && (
-              <div className="mb-3 rounded-xl border border-primary/40 bg-primary/10 px-4 py-3">
-                <div className="mb-1 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                  <span className="font-medium text-primary">{playing ? "در حال پخش" : "جملهٔ فعلی"}</span>
-                  <span className="font-mono tabular-nums">{formatTime(activeSegment.start)}</span>
-                </div>
-                <p className="text-sm leading-7 text-foreground">{activeSegment.text}</p>
-              </div>
-            )}
-
             <div className="mb-3 flex items-center gap-2">
               <div className="relative flex-1">
                 <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -796,14 +789,14 @@ function Index() {
             {filteredSegments.length === 0 ? (
               <p className="py-4 text-center text-sm text-muted-foreground">موردی یافت نشد.</p>
             ) : (
-              <ul className="max-h-80 space-y-2 overflow-y-auto pb-16">
+              <ul ref={listRef} className="max-h-80 space-y-2 overflow-y-auto pb-16">
                 {filteredSegments.map(({ s, i }) => {
                   const isActive = i === activeSegmentIndex;
                   return (
                     <li
                       key={i}
                       ref={isActive ? activeCardRef : undefined}
-                      className={`scroll-mb-16 rounded-xl border p-3 text-sm transition-colors ${
+                      className={`rounded-xl border p-3 text-sm transition-colors ${
                         isActive
                           ? "border-primary bg-primary/10 ring-1 ring-primary/40"
                           : "border-transparent bg-surface hover:bg-secondary/60"
