@@ -4,8 +4,9 @@ import { encodeWav } from "./wav";
 
 export const MAX_UPLOAD_BYTES = 24 * 1024 * 1024; // 24 MiB (Groq limit)
 
-// 16 kHz mono 16-bit PCM ≈ 32_000 bytes/s → ~10 min ≈ 18.3 MiB (safe under 24 MiB)
-const PART_SECONDS = 10 * 60;
+// Shorter parts reduce serverless timeouts and memory spikes.
+// 16 kHz mono 16-bit PCM ≈ 32_000 bytes/s → 3 min ≈ 5.5 MiB
+export const PART_SECONDS = 3 * 60;
 const TARGET_RATE = 16_000;
 
 export type AudioPart = {
@@ -24,10 +25,13 @@ export type AudioPart = {
 export async function splitAudioForUpload(
   source: Blob,
   baseName = "part",
+  onProgress?: (msg: string) => void,
 ): Promise<AudioPart[]> {
+  onProgress?.("در حال خواندن فایل…");
   const arrayBuffer = await source.arrayBuffer();
   const ctx = new AudioContext();
   try {
+    onProgress?.("در حال رمزگشایی صوت…");
     const decoded = await ctx.decodeAudioData(arrayBuffer.slice(0));
     const sampleRate = decoded.sampleRate;
     const channelData = mixToMono(decoded);
@@ -43,8 +47,14 @@ export async function splitAudioForUpload(
       );
       if (endSample <= startSample) continue;
 
+      onProgress?.(`در حال آماده‌سازی بخش ${i + 1} از ${partCount}…`);
+      // Yield so the UI can paint between heavy encode steps
+      await yieldToUi();
+
       const slice = channelData.subarray(startSample, endSample);
-      const blob = encodeWav([slice], sampleRate, TARGET_RATE);
+      // Copy slice — subarray views can be invalidated after GC of parent
+      const copy = new Float32Array(slice);
+      const blob = encodeWav([copy], sampleRate, TARGET_RATE);
       parts.push({
         blob,
         name: `${baseName}-part${String(i + 1).padStart(3, "0")}.wav`,
@@ -72,4 +82,14 @@ function mixToMono(buffer: AudioBuffer): Float32Array {
     }
   }
   return out;
+}
+
+function yieldToUi(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => resolve());
+    } else {
+      setTimeout(resolve, 0);
+    }
+  });
 }
