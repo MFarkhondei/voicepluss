@@ -137,7 +137,12 @@ function Index() {
 
   const baseName = (fileName ?? "transcript").replace(/\.[^.]+$/, "") || "transcript";
 
-  const downloadSubtitle = (kind: "srt" | "vtt") => {
+  const downloadSubtitle = (kind: "srt" | "vtt" | "txt") => {
+    if (kind === "txt") {
+      if (!text) return;
+      downloadText(toTxt(text), `${baseName}.txt`, "text/plain");
+      return;
+    }
     if (segments.length === 0) return;
     const content = kind === "srt" ? toSrt(segments) : toVtt(segments);
     downloadText(
