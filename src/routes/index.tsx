@@ -599,16 +599,16 @@ function Index() {
               <span className="w-10 shrink-0 text-end tabular-nums">{formatTime(duration)}</span>
             </div>
 
-            {/* دکمه پخش دقیقاً وسط؛ جای جلو/عقب جابه‌جا شده */}
+            {/* چپ: عقب | وسط: پخش | راست: جلو */}
             <div dir="ltr" className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center">
               <div className="flex justify-end pr-3">
                 <button
                   type="button"
-                  onClick={() => skip(SKIP_SECONDS)}
+                  onClick={() => skip(-SKIP_SECONDS)}
                   className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-secondary"
-                  title={`${SKIP_SECONDS} ثانیه جلو`}
+                  title={`${SKIP_SECONDS} ثانیه عقب`}
                 >
-                  <SkipForward className="size-4" />
+                  <SkipBack className="size-4" />
                   {SKIP_SECONDS}
                 </button>
               </div>
@@ -623,12 +623,12 @@ function Index() {
               <div className="flex justify-start pl-3">
                 <button
                   type="button"
-                  onClick={() => skip(-SKIP_SECONDS)}
+                  onClick={() => skip(SKIP_SECONDS)}
                   className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-secondary"
-                  title={`${SKIP_SECONDS} ثانیه عقب`}
+                  title={`${SKIP_SECONDS} ثانیه جلو`}
                 >
                   {SKIP_SECONDS}
-                  <SkipBack className="size-4" />
+                  <SkipForward className="size-4" />
                 </button>
               </div>
             </div>
