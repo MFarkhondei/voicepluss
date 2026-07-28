@@ -3,7 +3,7 @@ import { useCallback, useRef, useState } from "react";
 import { Mic, Square, Upload, Copy, Check, Loader2, FileAudio, Trash2, Download } from "lucide-react";
 import { encodeWav } from "@/lib/wav";
 import { toSrt, toVtt, toTxt, downloadText } from "@/lib/subtitles";
-import { MAX_UPLOAD_BYTES, splitAudioForUpload } from "@/lib/splitAudio";
+import { prepareAudioForTranscription } from "@/lib/splitAudio";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -32,8 +32,8 @@ const MODELS = [
   { id: "whisper-large-v3-turbo", label: "سریع (whisper-large-v3-turbo)" },
 ];
 
-const CLIENT_TIMEOUT_MS = 120_000;
-const CLIENT_RETRIES = 3;
+const CLIENT_TIMEOUT_MS = 90_000;
+const CLIENT_RETRIES = 4;
 
 function formatTime(sec: number) {
   const m = Math.floor(sec / 60).toString().padStart(2, "0");
@@ -51,17 +51,20 @@ async function transcribeOne(
   model: string,
   signal?: AbortSignal,
 ): Promise<{ text: string; segments: Segment[]; duration: number | null }> {
-  const form = new FormData();
-  form.append("file", blob, name);
-  form.append("model", model);
-
   let lastError: Error | null = null;
+
   for (let attempt = 0; attempt < CLIENT_RETRIES; attempt++) {
     if (signal?.aborted) throw new Error("عملیات لغو شد.");
+
+    const form = new FormData();
+    form.append("file", blob, name);
+    form.append("model", model);
+
     const controller = new AbortController();
     const onAbort = () => controller.abort();
     signal?.addEventListener("abort", onAbort);
     const timer = setTimeout(() => controller.abort(), CLIENT_TIMEOUT_MS);
+
     try {
       const res = await fetch("/api/transcribe", {
         method: "POST",
@@ -80,9 +83,9 @@ async function transcribeOne(
 
       if (!res.ok) {
         const msg = data?.error || `خطا در پردازش فایل صوتی (${res.status})`;
-        if (res.status >= 500 || res.status === 429) {
+        if (res.status >= 500 || res.status === 429 || res.status === 408) {
           lastError = new Error(msg);
-          await sleep(1500 * Math.pow(2, attempt));
+          await sleep(1200 * Math.pow(2, attempt));
           continue;
         }
         throw new Error(msg);
@@ -108,12 +111,12 @@ async function transcribeOne(
       signal?.removeEventListener("abort", onAbort);
       const isAbort = err instanceof DOMException && err.name === "AbortError";
       lastError = isAbort
-        ? new Error("زمان پردازش بخش به پایان رسید. دوباره تلاش می‌شود…")
+        ? new Error("زمان پردازش بخش تمام شد")
         : err instanceof Error
           ? err
           : new Error(String(err));
       if (attempt < CLIENT_RETRIES - 1) {
-        await sleep(1500 * Math.pow(2, attempt));
+        await sleep(1200 * Math.pow(2, attempt));
         continue;
       }
     }
@@ -161,28 +164,19 @@ function Index() {
       setProgressPct(0);
 
       try {
-        if (blob.size <= MAX_UPLOAD_BYTES) {
-          setProgressLabel("در حال ارسال و تبدیل…");
-          setProgressPct(10);
-          const result = await transcribeOne(blob, name, model, ac.signal);
-          if (!result.text) throw new Error("متنی تشخیص داده نشد. لطفاً دوباره ضبط کنید.");
-          setText(result.text);
-          setSegments(result.segments);
-          setProgressPct(100);
-          return;
-        }
-
-        setProgressLabel("فایل بزرگ است؛ در حال تقسیم…");
         const base = name.replace(/\.[^.]+$/, "") || "audio";
-        let parts;
+        let prepared;
         try {
-          parts = await splitAudioForUpload(blob, base, (msg) => setProgressLabel(msg));
+          prepared = await prepareAudioForTranscription(blob, base, (msg) => {
+            setProgressLabel(msg);
+          });
         } catch {
           throw new Error(
-            "امکان رمزگشایی این فایل در مرورگر وجود ندارد. لطفاً آن را به MP3 یا WAV تبدیل کنید یا فایل کوچک‌تری بفرستید.",
+            "امکان رمزگشایی این فایل در مرورگر وجود ندارد. لطفاً به MP3 یا WAV تبدیل کنید.",
           );
         }
 
+        const { parts } = prepared;
         if (parts.length === 0) throw new Error("فایل صوتی خالی یا نامعتبر است.");
 
         const allSegments: Segment[] = [];
@@ -192,7 +186,11 @@ function Index() {
         for (let i = 0; i < parts.length; i++) {
           if (ac.signal.aborted) throw new Error("عملیات لغو شد.");
           const part = parts[i];
-          setProgressLabel(`در حال تبدیل بخش ${i + 1} از ${parts.length}…`);
+          setProgressLabel(
+            parts.length === 1
+              ? "در حال تبدیل…"
+              : `در حال تبدیل بخش ${i + 1} از ${parts.length}…`,
+          );
           setProgressPct(Math.round((i / parts.length) * 100));
 
           try {
@@ -217,6 +215,7 @@ function Index() {
             failed.push(
               `بخش ${i + 1}: ${partErr instanceof Error ? partErr.message : String(partErr)}`,
             );
+            await sleep(500);
           }
           setProgressPct(Math.round(((i + 1) / parts.length) * 100));
         }
@@ -326,8 +325,8 @@ function Index() {
         </span>
         <h1 className="mt-5 text-4xl font-black tracking-tight sm:text-5xl">تبدیل گفتار به متن فارسی</h1>
         <p className="mx-auto mt-4 max-w-xl text-base leading-8 text-muted-foreground">
-          صدایتان را ضبط کنید یا یک فایل صوتی بفرستید؛ در چند ثانیه متن فارسی تمیز و قابل ویرایش تحویل بگیرید.
-          فایل‌های بزرگ‌تر از ۲۴ مگابایت به‌صورت خودکار تقسیم و ادغام می‌شوند.
+          صدایتان را ضبط کنید یا یک فایل صوتی بفرستید. فایل‌های طولانی به‌صورت خودکار به
+          بخش‌های کوتاه تقسیم و متن‌ها ادغام می‌شوند.
         </p>
       </header>
 
@@ -467,7 +466,7 @@ function Index() {
       )}
 
       <footer className="mt-auto pt-4 text-center text-xs text-muted-foreground">
-        فایل‌ها فقط برای پردازش ارسال می‌شوند و ذخیره نمی‌گردند. محدودیت هر بخش ۲۴ مگابایت است؛ فایل‌های بزرگ‌تر خودکار تقسیم می‌شوند.
+        فایل‌ها فقط برای پردازش ارسال می‌شوند. صوت‌های طولانی به بخش‌های ۹۰ ثانیه‌ای تقسیم می‌شوند.
       </footer>
     </main>
   );
