@@ -1,12 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 // Edge-compatible: analyze transcript with free Groq chat models.
+// mode=quick → short structured summary
+// mode=full  → deep multi-section analyst report
 
 const MAX_CHARS = 48_000;
-const TIMEOUT_MS = 90_000;
+const TIMEOUT_MS = 120_000;
 const MODEL = "llama-3.3-70b-versatile";
 
-const SYSTEM_PROMPT = `تو دستیار تحلیل متن فارسی هستی. فقط بر اساس متن داده‌شده پاسخ بده.
+const QUICK_PROMPT = `تو دستیار تحلیل متن فارسی هستی. فقط بر اساس متن داده‌شده پاسخ بده.
 خروجی را دقیقاً با این ساختار و به فارسی بنویس:
 
 ## خلاصه
@@ -27,6 +29,39 @@ const SYSTEM_PROMPT = `تو دستیار تحلیل متن فارسی هستی. 
 
 اگر متن خیلی کوتاه یا بی‌معنی بود، همین را کوتاه بگو. اغراق نکن و چیزی از خودت اضافه نکن.`;
 
+const FULL_PROMPT = `تو یک تحلیل‌گر حرفه‌ای متن فارسی هستی. مثل یک گزارش‌نویس دقیق، کل متن را بخش‌به‌بخش بررسی کن و فقط بر اساس محتوای داده‌شده بنویس. چیزی از خودت اختراع نکن.
+
+گزارش را به فارسی و با همین ساختار کامل بنویس:
+
+## خلاصه اجرایی
+خلاصهٔ کوتاه و جامع از کل متن (۳ تا ۶ جمله).
+
+## ساختار و بخش‌بندی محتوا
+متن را به بخش‌های منطقی تقسیم کن و برای هر بخش عنوان کوتاه و یک پاراگراف توضیح بده (چه گفته شده).
+
+## نکات کلیدی
+فهرست مهم‌ترین نکات (حداکثر ۱۲ مورد).
+
+## جزئیات مهم
+اعداد، نام‌ها، تاریخ‌ها، تصمیم‌ها، تعهدات یا ادعاهای مشخصی که در متن آمده را فهرست کن. اگر نبود بنویس: مورد مشخصی یافت نشد.
+
+## لحن و فضای گفتگو
+لحن کلی (رسمی/غیررسمی، موافق/منتقد، آرام/تنش‌دار و …) را در ۲–۴ جمله توضیح بده.
+
+## نقاط قوت محتوا
+چه بخش‌هایی شفاف، مستند یا مفید است.
+
+## ابهامات و کمبودها
+چه چیزهایی ناقص، مبهم یا نیازمند توضیح بیشتر است.
+
+## اقدامات و پیشنهادها
+کارهای عملی پیشنهادی بر اساس متن (یا بنویس: مورد خاصی یافت نشد).
+
+## جمع‌بندی نهایی
+یک پاراگراف جمع‌بندی و ارزیابی کلی.
+
+اگر متن خیلی کوتاه بود، همان را بگو و فقط بخش‌های قابل‌اجرا را پر کن.`;
+
 export const Route = createFileRoute("/api/analyze")({
   server: {
     handlers: {
@@ -39,9 +74,9 @@ export const Route = createFileRoute("/api/analyze")({
           );
         }
 
-        let body: { text?: string };
+        let body: { text?: string; mode?: string };
         try {
-          body = (await request.json()) as { text?: string };
+          body = (await request.json()) as { text?: string; mode?: string };
         } catch {
           return Response.json({ error: "درخواست نامعتبر است." }, { status: 400 });
         }
@@ -57,6 +92,14 @@ export const Route = createFileRoute("/api/analyze")({
           );
         }
 
+        const mode = body.mode === "full" ? "full" : "quick";
+        const systemPrompt = mode === "full" ? FULL_PROMPT : QUICK_PROMPT;
+        const maxTokens = mode === "full" ? 4096 : 2048;
+        const userLead =
+          mode === "full"
+            ? "به‌عنوان تحلیل‌گر، گزارش کامل و بخش‌به‌بخش از این متن پیاده‌شده تهیه کن:"
+            : "متن پیاده‌شده صوت را تحلیل کن:";
+
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
@@ -69,13 +112,13 @@ export const Route = createFileRoute("/api/analyze")({
             },
             body: JSON.stringify({
               model: MODEL,
-              temperature: 0.2,
-              max_tokens: 2048,
+              temperature: mode === "full" ? 0.25 : 0.2,
+              max_tokens: maxTokens,
               messages: [
-                { role: "system", content: SYSTEM_PROMPT },
+                { role: "system", content: systemPrompt },
                 {
                   role: "user",
-                  content: `متن پیاده‌شده صوت را تحلیل کن:\n\n${text}`,
+                  content: `${userLead}\n\n${text}`,
                 },
               ],
             }),
@@ -105,7 +148,7 @@ export const Route = createFileRoute("/api/analyze")({
             return Response.json({ error: "پاسخ خالی از سرویس تحلیل." }, { status: 502 });
           }
 
-          return Response.json({ analysis, model: MODEL });
+          return Response.json({ analysis, model: MODEL, mode });
         } catch (err) {
           clearTimeout(timer);
           const isAbort = err instanceof Error && err.name === "AbortError";
