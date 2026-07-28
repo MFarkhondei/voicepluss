@@ -120,50 +120,45 @@ export const Route = createFileRoute("/api/transcribe")({
         console.log(`[transcribe] incoming file=${String(file.name)} size=${file.size} model=${model}`);
 
         if (file.size <= MAX_BYTES) {
-          const upstream = new FormData();
-          upstream.append("file", file, file.name || "recording.wav");
-          upstream.append("model", model);
-          upstream.append("language", "fa");
-          upstream.append("response_format", "verbose_json");
-          upstream.append("temperature", "0");
-
-          const res = await fetch(
-            "https://api.groq.com/openai/v1/audio/transcriptions",
-            {
-              method: "POST",
-              headers: { Authorization: `Bearer ${apiKey}` },
-              body: upstream,
-            },
-          );
-
-          if (!res.ok) {
-            const detail = await res.text().catch(() => "");
-            console.warn(`[transcribe] upstream non-ok ${res.status} - ${detail.slice(0,500)}`);
-            return Response.json(
-              { error: `خطای سرویس Groq (${res.status})`, detail: detail.slice(0, 500) },
-              { status: res.status },
+          // Write to temp and reuse the same retry helper as multi-part path
+          const tmpSingle = uniqueTmp("single-") + (path.extname(file.name || "") || ".wav");
+          try {
+            const buf = Buffer.from(await file.arrayBuffer());
+            fs.writeFileSync(tmpSingle, buf);
+            const resPart = await transcribePart(
+              tmpSingle,
+              file.name || "recording.wav",
+              apiKey,
+              model,
+              DEFAULT_MAX_RETRIES,
+              DEFAULT_TIMEOUT_MS,
             );
+            if (!resPart.success) {
+              return Response.json(
+                { error: `خطای سرویس Groq: ${resPart.error}` },
+                { status: 502 },
+              );
+            }
+            const data = resPart.data as {
+              text?: string;
+              duration?: number;
+              segments?: { start: number; end: number; text: string }[];
+            };
+            const textFromSegments = (data.segments ?? []).map((s: any) => s.text.trim()).join(" ").trim();
+            const finalText = (data.text?.trim() || textFromSegments) ?? "";
+            return Response.json({
+              text: finalText,
+              duration: data.duration ?? null,
+              segments:
+                data.segments?.map((s: any) => ({
+                  start: s.start,
+                  end: s.end,
+                  text: s.text.trim(),
+                })) ?? [],
+            });
+          } finally {
+            try { fs.rmSync(tmpSingle, { force: true }); } catch {}
           }
-
-          const data = (await res.json()) as {
-            text?: string;
-            duration?: number;
-            segments?: { start: number; end: number; text: string }[];
-          };
-
-          const textFromSegments = (data.segments ?? []).map((s: any) => s.text.trim()).join(" ").trim();
-          const finalText = (data.text?.trim() || textFromSegments) ?? "";
-
-          return Response.json({
-            text: finalText,
-            duration: data.duration ?? null,
-            segments:
-              data.segments?.map((s: any) => ({
-                start: s.start,
-                end: s.end,
-                text: s.text.trim(),
-              })) ?? [],
-          });
         }
 
         if (!ffmpegPath) {
