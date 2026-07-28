@@ -23,6 +23,69 @@ async function runFfmpeg(args: string[], cwd?: string) {
   });
 }
 
+async function transcribePart(
+  partPath: string,
+  fname: string,
+  apiKey: string,
+  model: string,
+  maxRetries = 3,
+  timeoutMs = 60_000
+) {
+  let lastErr: any = null;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const chunkBuf = fs.readFileSync(partPath);
+      const upstream = new FormData();
+      // In node runtimes FormData/Blob are available in the server runtime used by this project.
+      upstream.append("file", new Blob([chunkBuf]), fname);
+      upstream.append("model", model);
+      upstream.append("language", "fa");
+      upstream.append("response_format", "verbose_json");
+      upstream.append("temperature", "0");
+
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const res = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}` },
+          body: upstream as any,
+          signal: controller.signal,
+        });
+        clearTimeout(id);
+
+        if (!res.ok) {
+          const detail = await res.text().catch(() => "");
+          lastErr = new Error(`status ${res.status}: ${detail.slice(0, 500)}`);
+          // If it's a 4xx client error, don't retry
+          if (res.status >= 400 && res.status < 500) break;
+          // otherwise retry
+          const backoff = 1000 * Math.pow(2, attempt);
+          await new Promise((r) => setTimeout(r, backoff));
+          continue;
+        }
+
+        const data = (await res.json()) as {
+          text?: string;
+          duration?: number;
+          segments?: { start: number; end: number; text: string }[];
+        };
+
+        return { success: true, data };
+      } finally {
+        try { clearTimeout(id); } catch {};
+      }
+    } catch (err) {
+      lastErr = err;
+      // If aborted, treat as retryable
+      const backoff = 1000 * Math.pow(2, attempt);
+      await new Promise((r) => setTimeout(r, backoff));
+      continue;
+    }
+  }
+  return { success: false, error: String(lastErr) };
+}
+
 export const Route = createFileRoute("/api/transcribe")({
   server: {
     handlers: {
@@ -105,7 +168,7 @@ export const Route = createFileRoute("/api/transcribe")({
         }
 
         // write uploaded file to temp
-        const tmpIn = uniqueTmp("in-") + path.extname(file.name || "") || "";
+        const tmpIn = (uniqueTmp("in-") + path.extname(file.name || "")) || "";
         try {
           const buf = Buffer.from(await file.arrayBuffer());
           fs.writeFileSync(tmpIn, buf);
@@ -130,7 +193,7 @@ export const Route = createFileRoute("/api/transcribe")({
           durationSeconds = Math.max(1, Math.floor(Buffer.byteLength(fs.readFileSync(tmpIn)) / 32000));
         }
 
-        const partsCount = Math.ceil(file.size / MAX_BYTES);
+        const partsCount = Math.max(1, Math.ceil(file.size / MAX_BYTES));
         const partDuration = Math.max(1, Math.ceil(durationSeconds / partsCount));
 
         const tmpDir = uniqueTmp("parts-") + ".d";
@@ -163,45 +226,31 @@ export const Route = createFileRoute("/api/transcribe")({
         // read parts
         const files = fs.readdirSync(tmpDir).filter((f) => f.startsWith("part-")).sort();
         if (files.length === 0) {
+          try { fs.rmSync(tmpIn, { force: true }); } catch {};
           return Response.json({ error: "بخش‌بندی فایل ناموفق بود." }, { status: 500 });
         }
 
         const allSegments: { start: number; end: number; text: string }[] = [];
         let combinedText = "";
+        const failedParts: { part: string; error: string }[] = [];
 
         for (let i = 0; i < files.length; i++) {
           const fname = files[i];
           const partPath = path.join(tmpDir, fname);
-          const chunkBuf = fs.readFileSync(partPath);
 
-          const upstream = new FormData();
-          upstream.append("file", new Blob([chunkBuf]), fname);
-          upstream.append("model", model);
-          upstream.append("language", "fa");
-          upstream.append("response_format", "verbose_json");
-          upstream.append("temperature", "0");
-
-          const res = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${apiKey}` },
-            body: upstream as any,
-          });
-
-          if (!res.ok) {
-            const detail = await res.text().catch(() => "");
-            // clean up
-            try { fs.rmSync(tmpIn, { force: true }); } catch {};
-            try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {};
-            return Response.json({ error: `خطای سرویس Groq (${res.status})`, detail: detail.slice(0, 500) }, { status: res.status });
+          const resPart = await transcribePart(partPath, fname, apiKey, model, 3, 60_000);
+          if (!resPart.success) {
+            failedParts.push({ part: fname, error: resPart.error });
+            // skip adding text/segments for this part and continue
+            continue;
           }
 
-          const data = (await res.json()) as {
+          const data = resPart.data as {
             text?: string;
             duration?: number;
             segments?: { start: number; end: number; text: string }[];
           };
 
-          // compute offset for this part
           const offset = i * partDuration;
 
           const textFromSegments = (data.segments ?? []).map((s) => s.text.trim()).join(" ").trim();
@@ -221,7 +270,13 @@ export const Route = createFileRoute("/api/transcribe")({
           fs.rmSync(tmpDir, { recursive: true, force: true });
         } catch {}
 
-        return Response.json({ text: combinedText, duration: null, segments: allSegments });
+        const result: any = { text: combinedText, duration: null, segments: allSegments };
+        if (failedParts.length > 0) {
+          result.partial = true;
+          result.failed = failedParts;
+        }
+
+        return Response.json(result);
       },
     },
   },
