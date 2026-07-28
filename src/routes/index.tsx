@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useRef, useState } from "react";
-import { Mic, Square, Upload, Copy, Check, Loader2, FileAudio, Trash2, Download } from "lucide-react";
+import { Mic, Square, Upload, Copy, Check, Loader2, Trash2, Download } from "lucide-react";
 import { encodeWav } from "@/lib/wav";
 import { toSrt, toVtt, toTxt, downloadText } from "@/lib/subtitles";
 import { prepareAudioForTranscription, DEFAULT_PART_MINUTES, clampPartMinutes } from "@/lib/splitAudio";
@@ -324,10 +324,7 @@ function Index() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-8 px-5 py-12">
       <header className="text-center">
-        <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5 text-xs font-medium text-muted-foreground">
-          <FileAudio className="size-3.5" /> موتور Whisper روی زیرساخت Groq
-        </span>
-        <h1 className="mt-5 text-4xl font-black tracking-tight sm:text-5xl">VoicePluss</h1>
+        <h1 className="text-4xl font-black tracking-tight sm:text-5xl">VoicePluss</h1>
         <p className="mx-auto mt-4 max-w-xl text-base leading-8 text-muted-foreground">
           VoicePluss — ضبط یا آپلود فایل صوتی و دریافت متن فارسی دقیق. فایل‌های طولانی
           به‌صورت خودکار تقسیم و متن‌ها ادغام می‌شوند.
