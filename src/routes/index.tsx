@@ -3,10 +3,9 @@ import { useCallback, useRef, useState } from "react";
 import { Mic, Square, Upload, Copy, Check, Loader2, FileAudio, Trash2, Download } from "lucide-react";
 import { encodeWav } from "@/lib/wav";
 import { toSrt, toVtt, toTxt, downloadText } from "@/lib/subtitles";
+import { MAX_UPLOAD_BYTES, splitAudioForUpload } from "@/lib/splitAudio";
 
-export const Route = createFileRoute(
-  "/",
-)({
+export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "تبدیل صوت به متن فارسی | مبتنی بر Groq" },
@@ -18,7 +17,8 @@ export const Route = createFileRoute(
       { property: "og:title", content: "تبدیل صوت به متن فارسی | مبتنی بر Groq" },
       {
         property: "og:description",
-        content: "ضبط یا آپلود فایل صوتی و دریافت متن فارسی دقیق در چند ثانیه با موتور Whisper روی زیرساخت پرسرعت Groq.",
+        content:
+          "ضبط یا آپلود فایل صوتی و دریافت متن فارسی دقیق در چند ثانیه با موتور Whisper روی زیرساخت پرسرعت Groq.",
       },
     ],
   }),
@@ -42,10 +42,40 @@ function formatTime(sec: number) {
   return `${m}:${s}`;
 }
 
+async function transcribeOne(
+  blob: Blob,
+  name: string,
+  model: string,
+): Promise<{ text: string; segments: Segment[]; duration: number | null }> {
+  const form = new FormData();
+  form.append("file", blob, name);
+  form.append("model", model);
+  const res = await fetch("/api/transcribe", { method: "POST", body: form });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || "خطا در پردازش فایل صوتی");
+
+  const textFromSegments = (data.segments ?? [])
+    .map((s: { text?: string }) => (s.text ?? "").trim())
+    .join(" ")
+    .trim();
+  const finalText = (data.text?.trim() || textFromSegments) ?? "";
+
+  return {
+    text: finalText,
+    segments: (data.segments ?? []).map((s: Segment) => ({
+      start: s.start,
+      end: s.end,
+      text: (s.text ?? "").trim(),
+    })),
+    duration: data.duration ?? null,
+  };
+}
+
 function Index() {
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [progressLabel, setProgressLabel] = useState<string | null>(null);
   const [text, setText] = useState("");
   const [segments, setSegments] = useState<Segment[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -66,23 +96,85 @@ function Index() {
       setText("");
       setSegments([]);
       setFileName(name);
+      setProgressLabel(null);
       try {
-        const form = new FormData();
-        form.append("file", blob, name);
-        form.append("model", model);
-        const res = await fetch("/api/transcribe", { method: "POST", body: form });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data?.error || "خطا در پردازش فایل صوتی");
-        // fallback: if API didn't return a `text` field, build one from segments
-        const textFromSegments = (data.segments ?? []).map((s: any) => (s.text ?? "").trim()).join(" ").trim();
-        const finalText = (data.text?.trim() || textFromSegments) ?? "";
-        if (!finalText) throw new Error("متنی تشخیص داده نشد. لطفاً دوباره ضبط کنید.");
+        // Small files: single request
+        if (blob.size <= MAX_UPLOAD_BYTES) {
+          setProgressLabel("در حال ارسال و تبدیل…");
+          const result = await transcribeOne(blob, name, model);
+          if (!result.text) throw new Error("متنی تشخیص داده نشد. لطفاً دوباره ضبط کنید.");
+          setText(result.text);
+          setSegments(result.segments);
+          return;
+        }
+
+        // Large files: decode → split into <24MB WAV parts → transcribe each → merge
+        setProgressLabel("فایل بزرگ است؛ در حال تقسیم به بخش‌های کوچکتر…");
+        const base = name.replace(/\.[^.]+$/, "") || "audio";
+        let parts;
+        try {
+          parts = await splitAudioForUpload(blob, base);
+        } catch {
+          throw new Error(
+            "امکان رمزگشایی این فایل در مرورگر وجود ندارد. لطفاً آن را به MP3 یا WAV تبدیل کنید یا فایل کوچکتری بفرستید.",
+          );
+        }
+
+        if (parts.length === 0) {
+          throw new Error("فایل صوتی خالی یا نامعتبر است.");
+        }
+
+        const allSegments: Segment[] = [];
+        const textParts: string[] = [];
+        const failed: string[] = [];
+
+        for (let i = 0; i < parts.length; i++) {
+          const part = parts[i];
+          setProgressLabel(`در حال تبدیل بخش ${i + 1} از ${parts.length}…`);
+          try {
+            const result = await transcribeOne(part.blob, part.name, model);
+            if (result.text) textParts.push(result.text);
+            for (const s of result.segments) {
+              allSegments.push({
+                start: s.start + part.offsetSeconds,
+                end: s.end + part.offsetSeconds,
+                text: s.text,
+              });
+            }
+          } catch (partErr) {
+            failed.push(
+              `بخش ${i + 1}: ${partErr instanceof Error ? partErr.message : String(partErr)}`,
+            );
+          }
+        }
+
+        const finalText =
+          textParts.join(" ").trim() ||
+          allSegments
+            .map((s) => s.text)
+            .join(" ")
+            .trim();
+
+        if (!finalText) {
+          throw new Error(
+            failed.length
+              ? `هیچ بخشی تبدیل نشد.\n${failed.join("\n")}`
+              : "متنی تشخیص داده نشد. لطفاً دوباره تلاش کنید.",
+          );
+        }
+
         setText(finalText);
-        setSegments(data.segments ?? []);
+        setSegments(allSegments);
+        if (failed.length > 0) {
+          setError(
+            `برخی بخش‌ها تبدیل نشدند (متن ناقص است):\n${failed.join("\n")}`,
+          );
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : "خطای ناشناخته");
       } finally {
         setLoading(false);
+        setProgressLabel(null);
       }
     },
     [model],
@@ -157,8 +249,6 @@ function Index() {
     );
   };
 
-
-
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-8 px-5 py-12">
       <header className="text-center">
@@ -170,7 +260,8 @@ function Index() {
         </h1>
         <p className="mx-auto mt-4 max-w-xl text-base leading-8 text-muted-foreground">
           صدایتان را ضبط کنید یا یک فایل صوتی بفرستید؛ در چند ثانیه متن فارسی تمیز و قابل
-          ویرایش تحویل بگیرید.
+          ویرایش تحویل بگیرید. فایل‌های بزرگ‌تر از ۲۴ مگابایت به‌صورت خودکار تقسیم و ادغام
+          می‌شوند.
         </p>
       </header>
 
@@ -224,14 +315,16 @@ function Index() {
       </section>
 
       {loading && (
-        <div className="panel flex items-center justify-center gap-3 p-8 text-muted-foreground">
-          <Loader2 className="size-5 animate-spin" />
-          در حال تبدیل «{fileName}» به متن…
+        <div className="panel flex flex-col items-center justify-center gap-2 p-8 text-muted-foreground">
+          <div className="flex items-center gap-3">
+            <Loader2 className="size-5 animate-spin" />
+            <span>{progressLabel || `در حال تبدیل «${fileName}» به متن…`}</span>
+          </div>
         </div>
       )}
 
       {error && (
-        <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-5 text-sm text-destructive">
+        <div className="whitespace-pre-wrap rounded-2xl border border-destructive/30 bg-destructive/10 p-5 text-sm text-destructive">
           {error}
         </div>
       )}
@@ -314,7 +407,8 @@ function Index() {
       )}
 
       <footer className="mt-auto pt-4 text-center text-xs text-muted-foreground">
-        فایل‌ها فقط برای پردازش ارسال می‌شوند و ذخیره نمی‌گردند.
+        فایل‌ها فقط برای پردازش ارسال می‌شوند و ذخیره نمی‌گردند. محدودیت هر بخش ۲۴ مگابایت
+        است؛ فایل‌های بزرگ‌تر خودکار تقسیم می‌شوند.
       </footer>
     </main>
   );
