@@ -18,7 +18,6 @@ import {
   Gauge,
   Search,
   ChevronDown,
-  Pencil,
 } from "lucide-react";
 import { encodeWav } from "@/lib/wav";
 import { toSrt, toTxt, downloadText } from "@/lib/subtitles";
@@ -168,8 +167,6 @@ function Index() {
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [analysisCopied, setAnalysisCopied] = useState(false);
   const [segmentQuery, setSegmentQuery] = useState("");
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [editDraft, setEditDraft] = useState("");
 
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -221,7 +218,6 @@ function Index() {
     el.playbackRate = playbackRate;
   }, [playbackRate, audioUrl]);
 
-  // پیام لغو بعد از چند ثانیه خودکار حذف شود
   useEffect(() => {
     if (!error) return;
     if (!error.includes("لغو")) return;
@@ -262,27 +258,29 @@ function Index() {
     return list.map((s) => s.text.trim()).filter(Boolean).join(" ").trim();
   }, []);
 
-  const startEditSegment = useCallback((index: number) => {
-    setEditingIndex(index);
-    setEditDraft(segments[index]?.text ?? "");
-  }, [segments]);
+  const updateSegmentText = useCallback(
+    (index: number, value: string) => {
+      setSegments((prev) => {
+        const next = prev.map((s, i) => (i === index ? { ...s, text: value } : s));
+        setText(rebuildTextFromSegments(next));
+        return next;
+      });
+      clearAnalysis();
+    },
+    [rebuildTextFromSegments, clearAnalysis],
+  );
 
-  const cancelEditSegment = useCallback(() => {
-    setEditingIndex(null);
-    setEditDraft("");
-  }, []);
-
-  const saveEditSegment = useCallback(() => {
-    if (editingIndex === null) return;
-    const next = segments.map((s, i) =>
-      i === editingIndex ? { ...s, text: editDraft.trim() } : s,
-    );
-    setSegments(next);
-    setText(rebuildTextFromSegments(next));
-    clearAnalysis();
-    setEditingIndex(null);
-    setEditDraft("");
-  }, [editingIndex, editDraft, segments, rebuildTextFromSegments, clearAnalysis]);
+  const playSegment = useCallback(
+    (start: number) => {
+      const el = playerRef.current;
+      if (!el || !audioUrl) return;
+      const next = Math.max(0, Math.min(el.duration || 0, start));
+      el.currentTime = next;
+      setCurrentTime(next);
+      void el.play().catch(() => setPlaying(false));
+    },
+    [audioUrl],
+  );
 
   const togglePlay = useCallback(() => {
     const el = playerRef.current;
@@ -331,8 +329,6 @@ function Index() {
       setText("");
       setSegments([]);
       setSegmentQuery("");
-      setEditingIndex(null);
-      setEditDraft("");
       setFileName(name);
       setProgressLabel(null);
       setProgressPct(0);
@@ -784,7 +780,6 @@ function Index() {
               <ul className="max-h-80 space-y-2 overflow-y-auto pb-16">
                 {filteredSegments.map(({ s, i }) => {
                   const isActive = i === activeSegmentIndex;
-                  const isEditing = editingIndex === i;
                   return (
                     <li
                       key={i}
@@ -792,69 +787,35 @@ function Index() {
                       className={`scroll-mb-16 rounded-xl border p-3 text-sm transition-colors ${
                         isActive
                           ? "border-primary bg-primary/10 ring-1 ring-primary/40"
-                          : "border-transparent bg-surface hover:bg-secondary"
+                          : "border-transparent bg-surface hover:bg-secondary/60"
                       }`}
                     >
                       <div className="flex items-start gap-3">
                         <button
                           type="button"
                           onClick={() => seekTo(s.start)}
-                          className="shrink-0 pt-0.5 font-mono text-xs text-muted-foreground hover:text-primary"
+                          className="shrink-0 pt-1.5 font-mono text-xs text-muted-foreground hover:text-primary"
                           title="پرش به این بخش"
                         >
                           {formatTime(s.start)}
                         </button>
-                        <div className="min-w-0 flex-1">
-                          {isEditing ? (
-                            <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
-                              <textarea
-                                value={editDraft}
-                                onChange={(e) => setEditDraft(e.target.value)}
-                                rows={3}
-                                className="w-full resize-y rounded-lg border border-border bg-card p-2 text-sm leading-7 outline-none focus:ring-2 focus:ring-ring"
-                                autoFocus
-                              />
-                              <div className="flex flex-wrap gap-2">
-                                <button
-                                  type="button"
-                                  onClick={saveEditSegment}
-                                  className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground"
-                                >
-                                  <Check className="size-3.5" /> ذخیره
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={cancelEditSegment}
-                                  className="inline-flex items-center rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-secondary"
-                                >
-                                  انصراف
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => seekTo(s.start)}
-                              className="w-full text-right leading-7"
-                              title="پرش به این بخش"
-                            >
-                              {s.text}
-                            </button>
-                          )}
-                        </div>
-                        {!isEditing && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              startEditSegment(i);
-                            }}
-                            className="shrink-0 rounded-lg p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
-                            title="ویرایش متن"
-                          >
-                            <Pencil className="size-3.5" />
-                          </button>
-                        )}
+                        <textarea
+                          value={s.text}
+                          onChange={(e) => updateSegmentText(i, e.target.value)}
+                          rows={2}
+                          className="min-w-0 flex-1 resize-y rounded-lg border border-transparent bg-transparent p-1.5 text-right text-sm leading-7 outline-none focus:border-border focus:bg-card focus:ring-2 focus:ring-ring"
+                          dir="rtl"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => playSegment(s.start)}
+                          disabled={!audioUrl}
+                          className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-border bg-card text-foreground transition-colors hover:bg-primary hover:text-primary-foreground disabled:opacity-40"
+                          title="پخش این جمله"
+                          aria-label="پخش این جمله"
+                        >
+                          <Play className="size-3.5 ml-0.5" />
+                        </button>
                       </div>
                     </li>
                   );
