@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Mic,
   Square,
@@ -16,6 +16,8 @@ import {
   SkipBack,
   SkipForward,
   Gauge,
+  Search,
+  ChevronDown,
 } from "lucide-react";
 import { encodeWav } from "@/lib/wav";
 import { toSrt, toTxt, downloadText } from "@/lib/subtitles";
@@ -163,6 +165,7 @@ function Index() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [analysisCopied, setAnalysisCopied] = useState(false);
+  const [segmentQuery, setSegmentQuery] = useState("");
 
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -250,6 +253,14 @@ function Index() {
     setCurrentTime(next);
   }, []);
 
+  const filteredSegments = useMemo(() => {
+    const q = segmentQuery.trim().toLowerCase();
+    if (!q) return segments.map((s, i) => ({ s, i }));
+    return segments
+      .map((s, i) => ({ s, i }))
+      .filter(({ s }) => s.text.toLowerCase().includes(q));
+  }, [segments, segmentQuery]);
+
   const send = useCallback(
     async (blob: Blob, name: string) => {
       cancelJob();
@@ -262,6 +273,7 @@ function Index() {
       setError(null);
       setText("");
       setSegments([]);
+      setSegmentQuery("");
       setFileName(name);
       setProgressLabel(null);
       setProgressPct(0);
@@ -459,7 +471,7 @@ function Index() {
   };
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-8 px-5 py-12">
+    <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-6 px-5 py-12">
       <header className="text-center">
         <h1 className="text-4xl font-black tracking-tight sm:text-5xl">VoicePluss</h1>
         <p className="mx-auto mt-4 max-w-xl text-base leading-8 text-muted-foreground">
@@ -538,21 +550,24 @@ function Index() {
       </section>
 
       {audioUrl && (
-        <section className="panel p-5 sm:p-6">
-          <audio
-            ref={playerRef}
-            src={audioUrl}
-            preload="metadata"
-            onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
-            onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime || 0)}
-            onPlay={() => setPlaying(true)}
-            onPause={() => setPlaying(false)}
-            onEnded={() => setPlaying(false)}
-            className="hidden"
-          />
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <h2 className="text-sm font-bold text-muted-foreground">پخش صوت{fileName ? ` — ${fileName}` : ""}</h2>
-            <div className="flex items-center gap-2 text-sm">
+        <details open className="panel group overflow-hidden">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 sm:px-6">
+            <span className="text-sm font-bold">پخش صوت{fileName ? ` — ${fileName}` : ""}</span>
+            <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="border-t border-border px-5 pb-5 pt-4 sm:px-6">
+            <audio
+              ref={playerRef}
+              src={audioUrl}
+              preload="metadata"
+              onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
+              onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime || 0)}
+              onPlay={() => setPlaying(true)}
+              onPause={() => setPlaying(false)}
+              onEnded={() => setPlaying(false)}
+              className="hidden"
+            />
+            <div className="mb-3 flex items-center justify-end gap-2 text-sm">
               <Gauge className="size-3.5 text-muted-foreground" />
               <select
                 value={playbackRate}
@@ -565,64 +580,60 @@ function Index() {
                 ))}
               </select>
             </div>
-          </div>
 
-          {/* dir=ltr: نوار از چپ پر می‌شود حتی در صفحهٔ RTL */}
-          <div
-            dir="ltr"
-            className="mb-1 flex items-center gap-3 text-xs font-mono text-muted-foreground"
-          >
-            <span className="w-10 shrink-0 tabular-nums">{formatTime(currentTime)}</span>
-            <input
-              type="range"
-              min={0}
-              max={duration || 0}
-              step={0.1}
-              value={Math.min(currentTime, duration || 0)}
-              onChange={(e) => seekTo(Number(e.target.value))}
-              className="h-2 flex-1 cursor-pointer accent-primary"
-              aria-label="موقعیت پخش"
-            />
-            <span className="w-10 shrink-0 text-end tabular-nums">{formatTime(duration)}</span>
-          </div>
+            <div
+              dir="ltr"
+              className="mb-1 flex items-center gap-3 text-xs font-mono text-muted-foreground"
+            >
+              <span className="w-10 shrink-0 tabular-nums">{formatTime(currentTime)}</span>
+              <input
+                type="range"
+                min={0}
+                max={duration || 0}
+                step={0.1}
+                value={Math.min(currentTime, duration || 0)}
+                onChange={(e) => seekTo(Number(e.target.value))}
+                className="h-2 flex-1 cursor-pointer accent-primary"
+                aria-label="موقعیت پخش"
+              />
+              <span className="w-10 shrink-0 text-end tabular-nums">{formatTime(duration)}</span>
+            </div>
 
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-            <button
-              type="button"
-              onClick={() => skip(-SKIP_SECONDS)}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-secondary"
-              title={`${SKIP_SECONDS} ثانیه عقب`}
-            >
-              <SkipBack className="size-4" />
-              {SKIP_SECONDS}ث
-            </button>
-            <button
-              type="button"
-              onClick={togglePlay}
-              className="inline-flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90"
-              aria-label={playing ? "توقف" : "پخش"}
-            >
-              {playing ? <Pause className="size-5" /> : <Play className="size-5 mr-[-2px]" />}
-            </button>
-            <button
-              type="button"
-              onClick={() => skip(SKIP_SECONDS)}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-secondary"
-              title={`${SKIP_SECONDS} ثانیه جلو`}
-            >
-              {SKIP_SECONDS}ث
-              <SkipForward className="size-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => seekTo(0)}
-              className="inline-flex items-center rounded-xl border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-secondary"
-              title="از ابتدا"
-            >
-              از ابتدا
-            </button>
+            {/* دکمه پخش دقیقاً وسط؛ جای جلو/عقب جابه‌جا شده */}
+            <div dir="ltr" className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center">
+              <div className="flex justify-end pr-3">
+                <button
+                  type="button"
+                  onClick={() => skip(SKIP_SECONDS)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-secondary"
+                  title={`${SKIP_SECONDS} ثانیه جلو`}
+                >
+                  <SkipForward className="size-4" />
+                  {SKIP_SECONDS}
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={togglePlay}
+                className="inline-flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90"
+                aria-label={playing ? "توقف" : "پخش"}
+              >
+                {playing ? <Pause className="size-5" /> : <Play className="size-5 ml-0.5" />}
+              </button>
+              <div className="flex justify-start pl-3">
+                <button
+                  type="button"
+                  onClick={() => skip(-SKIP_SECONDS)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-secondary"
+                  title={`${SKIP_SECONDS} ثانیه عقب`}
+                >
+                  {SKIP_SECONDS}
+                  <SkipBack className="size-4" />
+                </button>
+              </div>
+            </div>
           </div>
-        </section>
+        </details>
       )}
 
       {loading && (
@@ -651,13 +662,16 @@ function Index() {
       )}
 
       {text && (
-        <section className="panel p-6 sm:p-8">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="text-lg font-bold">
+        <details open className="panel group overflow-hidden">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 sm:px-6">
+            <span className="text-lg font-bold">
               متن پیاده‌شده
-              {loading ? <span className="mr-2 text-sm font-normal text-muted-foreground">(در حال تکمیل…)</span> : null}
-            </h2>
-            <div className="flex flex-wrap justify-end gap-2">
+              {loading ? <span className="mr-2 text-sm font-normal text-muted-foreground"> (در حال تکمیل…)</span> : null}
+            </span>
+            <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="border-t border-border px-5 pb-5 pt-4 sm:px-6">
+            <div className="mb-4 flex flex-wrap justify-end gap-2">
               {segments.length > 0 && !loading && (
                 <button onClick={() => downloadSubtitle("srt")} className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary">
                   <Download className="size-4" /> SRT
@@ -687,6 +701,7 @@ function Index() {
                   onClick={() => {
                     setText("");
                     setSegments([]);
+                    setSegmentQuery("");
                     clearAnalysis();
                     revokeAudioUrl();
                     setFileName(null);
@@ -697,26 +712,44 @@ function Index() {
                 </button>
               )}
             </div>
+            <textarea
+              value={text}
+              onChange={(e) => {
+                setText(e.target.value);
+                clearAnalysis();
+              }}
+              rows={8}
+              readOnly={loading}
+              className="w-full resize-y rounded-xl border border-border bg-surface p-4 text-base leading-9 outline-none focus:ring-2 focus:ring-ring"
+            />
           </div>
+        </details>
+      )}
 
-          <textarea
-            value={text}
-            onChange={(e) => {
-              setText(e.target.value);
-              clearAnalysis();
-            }}
-            rows={8}
-            readOnly={loading}
-            className="w-full resize-y rounded-xl border border-border bg-surface p-4 text-base leading-9 outline-none focus:ring-2 focus:ring-ring"
-          />
-
-          {segments.length > 0 && !loading && (
-            <details className="mt-5">
-              <summary className="cursor-pointer text-sm font-medium text-muted-foreground">
-                نمایش زمان‌بندی جمله‌ها ({segments.length} بخش)
-              </summary>
-              <ul className="mt-3 space-y-2">
-                {segments.map((s, i) => (
+      {segments.length > 0 && !loading && (
+        <details open className="panel group overflow-hidden">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 sm:px-6">
+            <span className="text-sm font-bold">زمان‌بندی جمله‌ها ({segments.length} بخش)</span>
+            <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="border-t border-border px-5 pb-5 pt-4 sm:px-6">
+            <div className="mb-3 flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="search"
+                  value={segmentQuery}
+                  onChange={(e) => setSegmentQuery(e.target.value)}
+                  placeholder="جستجو در جمله‌ها…"
+                  className="w-full rounded-xl border border-border bg-card py-2.5 pr-10 pl-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+            </div>
+            {filteredSegments.length === 0 ? (
+              <p className="py-4 text-center text-sm text-muted-foreground">موردی یافت نشد.</p>
+            ) : (
+              <ul className="max-h-80 space-y-2 overflow-y-auto">
+                {filteredSegments.map(({ s, i }) => (
                   <li key={i}>
                     <button
                       type="button"
@@ -730,9 +763,14 @@ function Index() {
                   </li>
                 ))}
               </ul>
-            </details>
-          )}
-        </section>
+            )}
+            {segmentQuery.trim() && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                {filteredSegments.length} از {segments.length} مورد
+              </p>
+            )}
+          </div>
+        </details>
       )}
 
       {analysisError && (
@@ -742,13 +780,16 @@ function Index() {
       )}
 
       {analysis && (
-        <section className="panel p-6 sm:p-8">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="flex items-center gap-2 text-lg font-bold">
+        <details open className="panel group overflow-hidden">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 sm:px-6">
+            <span className="flex items-center gap-2 text-lg font-bold">
               <Sparkles className="size-5 text-primary" />
               {analysisMode === "full" ? "گزارش تحلیل کامل" : "تحلیل متن"}
-            </h2>
-            <div className="flex flex-wrap justify-end gap-2">
+            </span>
+            <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="border-t border-border px-5 pb-5 pt-4 sm:px-6">
+            <div className="mb-4 flex flex-wrap justify-end gap-2">
               <button
                 onClick={() => void runAnalysis("quick")}
                 disabled={analyzing || !text.trim()}
@@ -780,11 +821,11 @@ function Index() {
                 <Trash2 className="size-4" /> بستن
               </button>
             </div>
+            <div className="whitespace-pre-wrap rounded-xl border border-border bg-surface p-4 text-base leading-9">
+              {analysis}
+            </div>
           </div>
-          <div className="whitespace-pre-wrap rounded-xl border border-border bg-surface p-4 text-base leading-9">
-            {analysis}
-          </div>
-        </section>
+        </details>
       )}
 
       <footer className="mt-auto pt-4 text-center text-xs text-muted-foreground">
