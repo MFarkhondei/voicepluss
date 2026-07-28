@@ -258,8 +258,15 @@ function Index() {
     return list.map((s) => s.text.trim()).filter(Boolean).join(" ").trim();
   }, []);
 
+  const pausePlayback = useCallback(() => {
+    const el = playerRef.current;
+    if (!el) return;
+    if (!el.paused) el.pause();
+  }, []);
+
   const updateSegmentText = useCallback(
     (index: number, value: string) => {
+      pausePlayback();
       setSegments((prev) => {
         const next = prev.map((s, i) => (i === index ? { ...s, text: value } : s));
         setText(rebuildTextFromSegments(next));
@@ -267,7 +274,7 @@ function Index() {
       });
       clearAnalysis();
     },
-    [rebuildTextFromSegments, clearAnalysis],
+    [rebuildTextFromSegments, clearAnalysis, pausePlayback],
   );
 
   const playSegment = useCallback(
@@ -801,6 +808,7 @@ function Index() {
                         </button>
                         <textarea
                           value={s.text}
+                          onFocus={pausePlayback}
                           onChange={(e) => updateSegmentText(i, e.target.value)}
                           rows={2}
                           className="min-w-0 flex-1 resize-y rounded-lg border border-transparent bg-transparent p-1.5 text-right text-sm leading-7 outline-none focus:border-border focus:bg-card focus:ring-2 focus:ring-ring"
@@ -859,7 +867,7 @@ function Index() {
               <button
                 onClick={() => void runAnalysis("full")}
                 disabled={analyzing || segments.length === 0}
-                className="inline-flex items-center gap-2 rounded-xl border border-primary/40 bg-primary/10 px-3.5 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/15 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-xl border border-primary/40 bg-primary/10 px-3.5 py-2 text-sm font-medium transition-colors hover:bg-primary/15 disabled:opacity-50"
                 title="بررسی بخش‌به‌بخش و گزارش کامل"
               >
                 {analyzing ? <Loader2 className="size-4 animate-spin" /> : <FileSearch className="size-4" />}
