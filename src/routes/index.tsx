@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useRef, useState } from "react";
-import { Mic, Square, Upload, Copy, Check, Loader2, Trash2, Download } from "lucide-react";
+import { Mic, Square, Upload, Copy, Check, Loader2, Trash2, Download, Sparkles } from "lucide-react";
 import { encodeWav } from "@/lib/wav";
 import { toSrt, toVtt, toTxt, downloadText } from "@/lib/subtitles";
 import { prepareAudioForTranscription, DEFAULT_PART_MINUTES, clampPartMinutes } from "@/lib/splitAudio";
@@ -137,6 +137,10 @@ function Index() {
   const [model, setModel] = useState(MODELS[0].id);
   const [partMinutes, setPartMinutes] = useState(DEFAULT_PART_MINUTES);
   const [copied, setCopied] = useState(false);
+  const [analysis, setAnalysis] = useState<string | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [analysisCopied, setAnalysisCopied] = useState(false);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -148,6 +152,11 @@ function Index() {
   const cancelJob = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
+  }, []);
+
+  const clearAnalysis = useCallback(() => {
+    setAnalysis(null);
+    setAnalysisError(null);
   }, []);
 
   const send = useCallback(
@@ -163,6 +172,7 @@ function Index() {
       setFileName(name);
       setProgressLabel(null);
       setProgressPct(0);
+      clearAnalysis();
 
       try {
         const base = name.replace(/\.[^.]+$/, "") || "audio";
@@ -249,8 +259,36 @@ function Index() {
         if (abortRef.current === ac) abortRef.current = null;
       }
     },
-    [model, partMinutes, cancelJob],
+    [model, partMinutes, cancelJob, clearAnalysis],
   );
+
+  const runAnalysis = useCallback(async () => {
+    const payload = text.trim();
+    if (!payload || analyzing) return;
+    setAnalyzing(true);
+    setAnalysisError(null);
+    try {
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: payload }),
+      });
+      let data: any;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(`پاسخ نامعتبر از سرور (کد ${res.status})`);
+      }
+      if (!res.ok) {
+        throw new Error(data?.error || `خطا در تحلیل (${res.status})`);
+      }
+      setAnalysis((data.analysis as string) || "");
+    } catch (e) {
+      setAnalysisError(e instanceof Error ? e.message : "خطای ناشناخته در تحلیل");
+    } finally {
+      setAnalyzing(false);
+    }
+  }, [text, analyzing]);
 
   const stopRecording = useCallback(async () => {
     setRecording(false);
@@ -302,6 +340,13 @@ function Index() {
     await navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 1600);
+  };
+
+  const copyAnalysis = async () => {
+    if (!analysis) return;
+    await navigator.clipboard.writeText(analysis);
+    setAnalysisCopied(true);
+    setTimeout(() => setAnalysisCopied(false), 1600);
   };
 
   const baseName = (fileName ?? "transcript").replace(/\.[^.]+$/, "") || "transcript";
@@ -448,12 +493,29 @@ function Index() {
                   <Download className="size-4" /> TXT
                 </button>
               )}
+              {!loading && (
+                <button
+                  onClick={() => void runAnalysis()}
+                  disabled={analyzing || !text.trim()}
+                  className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary disabled:opacity-50"
+                >
+                  {analyzing ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+                  {analyzing ? "در حال تحلیل…" : "تحلیل متن"}
+                </button>
+              )}
               <button onClick={copy} disabled={!text} className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
                 {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
                 {copied ? "کپی شد" : "کپی"}
               </button>
               {!loading && (
-                <button onClick={() => { setText(""); setSegments([]); }} className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary">
+                <button
+                  onClick={() => {
+                    setText("");
+                    setSegments([]);
+                    clearAnalysis();
+                  }}
+                  className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary"
+                >
                   <Trash2 className="size-4" /> پاک کردن
                 </button>
               )}
@@ -462,7 +524,10 @@ function Index() {
 
           <textarea
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              setText(e.target.value);
+              clearAnalysis();
+            }}
             rows={8}
             readOnly={loading}
             className="w-full resize-y rounded-xl border border-border bg-surface p-4 text-base leading-9 outline-none focus:ring-2 focus:ring-ring"
@@ -483,6 +548,49 @@ function Index() {
               </ul>
             </details>
           )}
+        </section>
+      )}
+
+      {analysisError && (
+        <div className="whitespace-pre-wrap rounded-2xl border border-destructive/30 bg-destructive/10 p-5 text-sm text-destructive">
+          {analysisError}
+        </div>
+      )}
+
+      {analysis && (
+        <section className="panel p-6 sm:p-8">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="flex items-center gap-2 text-lg font-bold">
+              <Sparkles className="size-5 text-primary" />
+              تحلیل متن
+            </h2>
+            <div className="flex flex-wrap justify-end gap-2">
+              <button
+                onClick={() => void runAnalysis()}
+                disabled={analyzing || !text.trim()}
+                className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary disabled:opacity-50"
+              >
+                {analyzing ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+                تحلیل مجدد
+              </button>
+              <button
+                onClick={copyAnalysis}
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+              >
+                {analysisCopied ? <Check className="size-4" /> : <Copy className="size-4" />}
+                {analysisCopied ? "کپی شد" : "کپی"}
+              </button>
+              <button
+                onClick={clearAnalysis}
+                className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary"
+              >
+                <Trash2 className="size-4" /> بستن
+              </button>
+            </div>
+          </div>
+          <div className="whitespace-pre-wrap rounded-xl border border-border bg-surface p-4 text-base leading-9">
+            {analysis}
+          </div>
         </section>
       )}
 
