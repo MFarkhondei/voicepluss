@@ -54,6 +54,7 @@ const MODELS = [
 
 const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 const SKIP_SECONDS = 10;
+const CANCEL_MSG = "عملیات لغو شد.";
 
 const CLIENT_TIMEOUT_MS = 240_000;
 const CLIENT_RETRIES = 4;
@@ -78,7 +79,7 @@ async function transcribeOne(
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt < CLIENT_RETRIES; attempt++) {
-    if (signal?.aborted) throw new Error("عملیات لغو شد.");
+    if (signal?.aborted) throw new Error(CANCEL_MSG);
 
     const form = new FormData();
     form.append("file", blob, name);
@@ -220,6 +221,14 @@ function Index() {
     el.playbackRate = playbackRate;
   }, [playbackRate, audioUrl]);
 
+  // پیام لغو بعد از چند ثانیه خودکار حذف شود
+  useEffect(() => {
+    if (!error) return;
+    if (!error.includes("لغو")) return;
+    const t = setTimeout(() => setError(null), 3500);
+    return () => clearTimeout(t);
+  }, [error]);
+
   const activeSegmentIndex = useMemo(() => {
     if (segments.length === 0) return -1;
     for (let i = 0; i < segments.length; i++) {
@@ -235,7 +244,7 @@ function Index() {
 
   useEffect(() => {
     if (activeSegmentIndex < 0) return;
-    activeCardRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    activeCardRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [activeSegmentIndex]);
 
   const cancelJob = useCallback(() => {
@@ -353,7 +362,7 @@ function Index() {
         const failed: string[] = [];
 
         for (let i = 0; i < parts.length; i++) {
-          if (ac.signal.aborted) throw new Error("عملیات لغو شد.");
+          if (ac.signal.aborted) throw new Error(CANCEL_MSG);
           const part = parts[i];
           setProgressLabel(
             parts.length === 1
@@ -380,7 +389,7 @@ function Index() {
               setSegments([...allSegments]);
             }
           } catch (partErr) {
-            if (ac.signal.aborted) throw new Error("عملیات لغو شد.");
+            if (ac.signal.aborted) throw new Error(CANCEL_MSG);
             failed.push(
               `بخش ${i + 1}: ${partErr instanceof Error ? partErr.message : String(partErr)}`,
             );
@@ -419,7 +428,9 @@ function Index() {
 
   const runAnalysis = useCallback(
     async (mode: AnalysisMode = "quick") => {
-      const payload = text.trim();
+      const payload =
+        text.trim() ||
+        segments.map((s) => s.text.trim()).filter(Boolean).join(" ").trim();
       if (!payload || analyzing) return;
       setAnalyzing(true);
       setAnalysisError(null);
@@ -446,7 +457,7 @@ function Index() {
         setAnalyzing(false);
       }
     },
-    [text, analyzing],
+    [text, segments, analyzing],
   );
 
   const stopRecording = useCallback(async () => {
@@ -496,7 +507,9 @@ function Index() {
   };
 
   const copy = async () => {
-    await navigator.clipboard.writeText(text);
+    const body = segments.map((s) => s.text.trim()).filter(Boolean).join("\n");
+    if (!body) return;
+    await navigator.clipboard.writeText(body);
     setCopied(true);
     setTimeout(() => setCopied(false), 1600);
   };
@@ -511,14 +524,15 @@ function Index() {
   const baseName = (fileName ?? "transcript").replace(/\.[^.]+$/, "") || "transcript";
 
   const downloadSubtitle = (kind: "srt" | "txt") => {
+    if (segments.length === 0) return;
     if (kind === "txt") {
-      if (!text) return;
-      downloadText(toTxt(text), `${baseName}.txt`, "text/plain");
+      downloadText(toTxt(segments), `${baseName}.txt`, "text/plain");
       return;
     }
-    if (segments.length === 0) return;
     downloadText(toSrt(segments), `${baseName}.srt`, "application/x-subrip");
   };
+
+  const hasTranscript = segments.length > 0;
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-6 px-5 py-12">
@@ -710,18 +724,18 @@ function Index() {
         </div>
       )}
 
-      {text && (
+      {hasTranscript && (
         <details open className="panel group overflow-hidden">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 sm:px-6">
-            <span className="text-lg font-bold">
-              متن پیاده‌شده
-              {loading ? <span className="mr-2 text-sm font-normal text-muted-foreground"> (در حال تکمیل…)</span> : null}
+            <span className="text-sm font-bold">
+              زمان‌بندی جمله‌ها ({segments.length} بخش)
+              {loading ? <span className="mr-2 text-xs font-normal text-muted-foreground"> (در حال تکمیل…)</span> : null}
             </span>
             <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
           </summary>
           <div className="border-t border-border px-5 pb-5 pt-4 sm:px-6">
             <div className="mb-4 flex flex-wrap justify-end gap-2">
-              {segments.length > 0 && !loading && (
+              {!loading && (
                 <button onClick={() => downloadSubtitle("srt")} className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary">
                   <Download className="size-4" /> SRT
                 </button>
@@ -734,56 +748,23 @@ function Index() {
               {!loading && (
                 <button
                   onClick={() => void runAnalysis("quick")}
-                  disabled={analyzing || !text.trim()}
+                  disabled={analyzing || segments.length === 0}
                   className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary disabled:opacity-50"
                 >
                   {analyzing ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
                   {analyzing ? "در حال تحلیل…" : "تحلیل متن"}
                 </button>
               )}
-              <button onClick={copy} disabled={!text} className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+              <button
+                onClick={copy}
+                disabled={segments.length === 0}
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
                 {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
                 {copied ? "کپی شد" : "کپی"}
               </button>
-              {!loading && (
-                <button
-                  onClick={() => {
-                    setText("");
-                    setSegments([]);
-                    setSegmentQuery("");
-                    setEditingIndex(null);
-                    setEditDraft("");
-                    clearAnalysis();
-                    revokeAudioUrl();
-                    setFileName(null);
-                  }}
-                  className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary"
-                >
-                  <Trash2 className="size-4" /> پاک کردن
-                </button>
-              )}
             </div>
-            <textarea
-              value={text}
-              onChange={(e) => {
-                setText(e.target.value);
-                clearAnalysis();
-              }}
-              rows={8}
-              readOnly={loading}
-              className="w-full resize-y rounded-xl border border-border bg-surface p-4 text-base leading-9 outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
-        </details>
-      )}
 
-      {segments.length > 0 && !loading && (
-        <details open className="panel group overflow-hidden">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 sm:px-6">
-            <span className="text-sm font-bold">زمان‌بندی جمله‌ها ({segments.length} بخش)</span>
-            <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-          </summary>
-          <div className="border-t border-border px-5 pb-5 pt-4 sm:px-6">
             <div className="mb-3 flex items-center gap-2">
               <div className="relative flex-1">
                 <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -796,10 +777,11 @@ function Index() {
                 />
               </div>
             </div>
+
             {filteredSegments.length === 0 ? (
               <p className="py-4 text-center text-sm text-muted-foreground">موردی یافت نشد.</p>
             ) : (
-              <ul className="max-h-80 space-y-2 overflow-y-auto">
+              <ul className="max-h-80 space-y-2 overflow-y-auto pb-16">
                 {filteredSegments.map(({ s, i }) => {
                   const isActive = i === activeSegmentIndex;
                   const isEditing = editingIndex === i;
@@ -807,7 +789,7 @@ function Index() {
                     <li
                       key={i}
                       ref={isActive ? activeCardRef : undefined}
-                      className={`rounded-xl border p-3 text-sm transition-colors ${
+                      className={`scroll-mb-16 rounded-xl border p-3 text-sm transition-colors ${
                         isActive
                           ? "border-primary bg-primary/10 ring-1 ring-primary/40"
                           : "border-transparent bg-surface hover:bg-secondary"
@@ -907,7 +889,7 @@ function Index() {
             <div className="mb-4 flex flex-wrap justify-end gap-2">
               <button
                 onClick={() => void runAnalysis("quick")}
-                disabled={analyzing || !text.trim()}
+                disabled={analyzing || segments.length === 0}
                 className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary disabled:opacity-50"
               >
                 {analyzing ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
@@ -915,7 +897,7 @@ function Index() {
               </button>
               <button
                 onClick={() => void runAnalysis("full")}
-                disabled={analyzing || !text.trim()}
+                disabled={analyzing || segments.length === 0}
                 className="inline-flex items-center gap-2 rounded-xl border border-primary/40 bg-primary/10 px-3.5 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/15 disabled:opacity-50"
                 title="بررسی بخش‌به‌بخش و گزارش کامل"
               >
