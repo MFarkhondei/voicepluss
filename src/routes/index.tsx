@@ -238,6 +238,8 @@ function Index() {
     return -1;
   }, [segments, currentTime]);
 
+  const activeSegment = activeSegmentIndex >= 0 ? segments[activeSegmentIndex] : null;
+
   useEffect(() => {
     if (activeSegmentIndex < 0) return;
     activeCardRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -768,6 +770,16 @@ function Index() {
               </button>
             </div>
 
+            {activeSegment && (
+              <div className="mb-3 rounded-xl border border-primary/40 bg-primary/10 px-4 py-3">
+                <div className="mb-1 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                  <span className="font-medium text-primary">{playing ? "در حال پخش" : "جملهٔ فعلی"}</span>
+                  <span className="font-mono tabular-nums">{formatTime(activeSegment.start)}</span>
+                </div>
+                <p className="text-sm leading-7 text-foreground">{activeSegment.text}</p>
+              </div>
+            )}
+
             <div className="mb-3 flex items-center gap-2">
               <div className="relative flex-1">
                 <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -867,7 +879,7 @@ function Index() {
               <button
                 onClick={() => void runAnalysis("full")}
                 disabled={analyzing || segments.length === 0}
-                className="inline-flex items-center gap-2 rounded-xl border border-primary/40 bg-primary/10 px-3.5 py-2 text-sm font-medium transition-colors hover:bg-primary/15 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-xl border border-primary/40 bg-primary/10 px-3.5 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/15 disabled:opacity-50"
                 title="بررسی بخش‌به‌بخش و گزارش کامل"
               >
                 {analyzing ? <Loader2 className="size-4 animate-spin" /> : <FileSearch className="size-4" />}
