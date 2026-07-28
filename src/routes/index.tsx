@@ -3,7 +3,7 @@ import { useCallback, useRef, useState } from "react";
 import { Mic, Square, Upload, Copy, Check, Loader2, FileAudio, Trash2, Download } from "lucide-react";
 import { encodeWav } from "@/lib/wav";
 import { toSrt, toVtt, toTxt, downloadText } from "@/lib/subtitles";
-import { prepareAudioForTranscription } from "@/lib/splitAudio";
+import { prepareAudioForTranscription, DEFAULT_PART_MINUTES, clampPartMinutes } from "@/lib/splitAudio";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -32,7 +32,7 @@ const MODELS = [
   { id: "whisper-large-v3-turbo", label: "سریع (whisper-large-v3-turbo)" },
 ];
 
-const CLIENT_TIMEOUT_MS = 180_000; // 3 min per 10-min part
+const CLIENT_TIMEOUT_MS = 240_000; // up to ~4 min per part (covers longer chunks)
 const CLIENT_RETRIES = 4;
 
 function formatTime(sec: number) {
@@ -135,6 +135,7 @@ function Index() {
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [model, setModel] = useState(MODELS[0].id);
+  const [partMinutes, setPartMinutes] = useState(DEFAULT_PART_MINUTES);
   const [copied, setCopied] = useState(false);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -167,9 +168,12 @@ function Index() {
         const base = name.replace(/\.[^.]+$/, "") || "audio";
         let prepared;
         try {
-          prepared = await prepareAudioForTranscription(blob, base, (msg) => {
-            setProgressLabel(msg);
-          });
+          prepared = await prepareAudioForTranscription(
+            blob,
+            base,
+            (msg) => setProgressLabel(msg),
+            partMinutes,
+          );
         } catch {
           throw new Error(
             "امکان رمزگشایی این فایل در مرورگر وجود ندارد. لطفاً به MP3 یا WAV تبدیل کنید.",
@@ -245,7 +249,7 @@ function Index() {
         if (abortRef.current === ac) abortRef.current = null;
       }
     },
-    [model, cancelJob],
+    [model, partMinutes, cancelJob],
   );
 
   const stopRecording = useCallback(async () => {
@@ -362,18 +366,38 @@ function Index() {
               />
             </label>
 
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-muted-foreground">مدل:</span>
-              <select
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                disabled={loading}
-                className="rounded-xl border border-border bg-card px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-              >
-                {MODELS.map((m) => (
-                  <option key={m.id} value={m.id}>{m.label}</option>
-                ))}
-              </select>
+            <div className="flex flex-wrap items-center justify-center gap-4 text-sm">
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">مدل:</span>
+                <select
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  disabled={loading}
+                  className="rounded-xl border border-border bg-card px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                >
+                  {MODELS.map((m) => (
+                    <option key={m.id} value={m.id}>{m.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">طول هر بخش:</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={13}
+                  step={1}
+                  value={partMinutes}
+                  disabled={loading}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setPartMinutes(Number.isFinite(v) ? clampPartMinutes(v) : DEFAULT_PART_MINUTES);
+                  }}
+                  className="w-16 rounded-xl border border-border bg-card px-2 py-2 text-center text-sm outline-none focus:ring-2 focus:ring-ring"
+                  title="مدت هر بخش بر حسب دقیقه (۱ تا ۱۳)"
+                />
+                <span className="text-muted-foreground">دقیقه</span>
+              </div>
             </div>
           </div>
         </div>
@@ -466,7 +490,7 @@ function Index() {
       )}
 
       <footer className="mt-auto pt-4 text-center text-xs text-muted-foreground">
-        فایل‌ها فقط برای پردازش ارسال می‌شوند. صوت‌های طولانی به بخش‌های ۱۰ دقیقه‌ای تقسیم می‌شوند.
+        فایل‌ها فقط برای پردازش ارسال می‌شوند. صوت‌های طولانی طبق «طول هر بخش» تقسیم می‌شوند (پیش‌فرض ۲ دقیقه).
       </footer>
     </main>
   );
