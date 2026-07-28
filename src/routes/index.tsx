@@ -135,6 +135,20 @@ function Index() {
     setTimeout(() => setCopied(false), 1600);
   };
 
+  const baseName = (fileName ?? "transcript").replace(/\.[^.]+$/, "") || "transcript";
+
+  const downloadSubtitle = (kind: "srt" | "vtt") => {
+    if (segments.length === 0) return;
+    const content = kind === "srt" ? toSrt(segments) : toVtt(segments);
+    downloadText(
+      content,
+      `${baseName}.${kind}`,
+      kind === "srt" ? "application/x-subrip" : "text/vtt",
+    );
+  };
+
+
+
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-8 px-5 py-12">
       <header className="text-center">
