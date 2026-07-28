@@ -63,8 +63,12 @@ export const Route = createFileRoute("/api/transcribe")({
           segments?: { start: number; end: number; text: string }[];
         };
 
+        // اگر فیلد text در پاسخ وجود نداشت، متن را از روی segments بسازیم
+        const textFromSegments = (data.segments ?? []).map((s) => s.text.trim()).join(" ").trim();
+        const finalText = (data.text?.trim() || textFromSegments) ?? "";
+
         return Response.json({
-          text: data.text?.trim() ?? "",
+          text: finalText,
           duration: data.duration ?? null,
           segments:
             data.segments?.map((s) => ({
