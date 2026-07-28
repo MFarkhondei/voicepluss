@@ -15,7 +15,7 @@ export const Route = createFileRoute("/")({
       { property: "og:title", content: "تبدیل صوت به متن فارسی | مبتنی بر Groq" },
       {
         property: "og:description",
-        content: "ضبط صدا یا آپلود فایل و دریافت پیاده‌سازی متنی فارسی با سرعت بالا.",
+        content: "ضبط یا آپلود فایل صوتی و دریافت متن فارسی دقیق در چند ثانیه با موتور Whisper روی زیرساخت پرسرعت Groq.",
       },
     ],
   }),
