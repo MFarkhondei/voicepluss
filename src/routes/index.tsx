@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useRef, useState } from "react";
 import { Mic, Square, Upload, Copy, Check, Loader2, FileAudio, Trash2, Download } from "lucide-react";
 import { encodeWav } from "@/lib/wav";
-import { toSrt, toVtt, downloadText } from "@/lib/subtitles";
+import { toSrt, toVtt, toTxt, downloadText } from "@/lib/subtitles";
 
 export const Route = createFileRoute("/")({
   head: () => ({
