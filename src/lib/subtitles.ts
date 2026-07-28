@@ -33,6 +33,11 @@ export function toVtt(segments: Segment[]) {
   );
 }
 
+export function toTxt(text: string) {
+  return text.trim() + "\n";
+}
+
+
 export function downloadText(content: string, filename: string, mime: string) {
   const blob = new Blob(["\ufeff" + content], { type: `${mime};charset=utf-8` });
   const url = URL.createObjectURL(blob);
