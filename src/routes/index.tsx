@@ -674,12 +674,16 @@ function Index() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-6 px-5 py-12">
       <header className="text-center">
+        <div className="flex justify-end">
+          <ThemeToggle />
+        </div>
         <h1 className="text-4xl font-black tracking-tight sm:text-5xl">VoicePluss</h1>
         <p className="mx-auto mt-4 max-w-xl text-base leading-8 text-muted-foreground">
           VoicePluss — ضبط یا آپلود فایل صوتی و دریافت متن فارسی دقیق. فایل‌های طولانی
           به‌صورت خودکار تقسیم و متن‌ها ادغام می‌شوند.
         </p>
       </header>
+
 
       <section className="panel p-6 sm:p-8">
         <div className="flex flex-col items-center gap-5">
