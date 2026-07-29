@@ -22,6 +22,8 @@ import {
 import { encodeWav } from "@/lib/wav";
 import { toSrt, toTxt, downloadText, parseSrt } from "@/lib/subtitles";
 import { prepareAudioForTranscription, DEFAULT_PART_MINUTES, clampPartMinutes } from "@/lib/splitAudio";
+import { ThemeToggle } from "@/components/ThemeToggle";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
