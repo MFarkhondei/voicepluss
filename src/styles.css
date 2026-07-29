@@ -166,6 +166,12 @@
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   }
 
+  html,
+  body {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
@@ -175,6 +181,13 @@
       radial-gradient(ellipse at 90% 10%, oklch(0.496 0.069 179.2 / 0.12), transparent 50%);
     background-attachment: fixed;
   }
+
+  img,
+  video,
+  canvas,
+  svg {
+    max-width: 100%;
+  }
 }
 
 @utility panel {
@@ -183,6 +196,9 @@
   border-radius: var(--radius-2xl);
   box-shadow: var(--shadow-soft);
   transition: box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 @keyframes pulse-ring {
@@ -197,4 +213,3 @@
 @utility recording-pulse {
   animation: pulse-ring 1.6s ease-out infinite;
 }
-
