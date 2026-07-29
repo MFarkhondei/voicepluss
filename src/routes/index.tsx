@@ -174,7 +174,6 @@ function SegmentRow({
   const [draft, setDraft] = useState(seg.text);
   const [editing, setEditing] = useState(false);
 
-  // متن ویرایش‌نشده را با تغییرات بیرونی همگام کن (ولی وسط تایپ کاربر هرگز)
   useEffect(() => {
     if (!editing) setDraft(seg.text);
   }, [seg.text, editing]);
@@ -231,7 +230,6 @@ function SegmentRow({
             <SkipForward className="size-4" />
           </button>
         </div>
-
       </div>
     </li>
   );
@@ -330,7 +328,6 @@ function Index() {
     return -1;
   }, [segments, currentTime]);
 
-  // کارت فعال را به ابتدای محدودهٔ اسکرول لیست ببر
   useEffect(() => {
     if (activeSegmentIndex < 0) return;
     const list = listRef.current;
@@ -356,7 +353,6 @@ function Index() {
   const rebuildTextFromSegments = useCallback((list: Segment[]) => {
     return list.map((s) => s.text.trim()).filter(Boolean).join(" ").trim();
   }, []);
-
 
   const updateSegmentText = useCallback(
     (index: number, value: string) => {
@@ -673,20 +669,8 @@ function Index() {
 
   const hasTranscript = segments.length > 0;
 
-  return (
-    <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-6 px-5 py-12">
-      <header className="text-center">
-        <div className="flex justify-end">
-          <ThemeToggle />
-        </div>
-        <h1 className="text-4xl font-black tracking-tight sm:text-5xl">VoicePluss</h1>
-        <p className="mx-auto mt-4 max-w-xl text-base leading-8 text-muted-foreground">
-          VoicePluss — ضبط یا آپلود فایل صوتی و دریافت متن فارسی دقیق. فایل‌های طولانی
-          به‌صورت خودکار تقسیم و متن‌ها ادغام می‌شوند.
-        </p>
-      </header>
-
-
+  const controlsColumn = (
+    <div className="flex flex-col gap-6">
       <section className="panel p-6 sm:p-8">
         <div className="flex flex-col items-center gap-5">
           <button
@@ -909,95 +893,100 @@ function Index() {
           {error}
         </div>
       )}
+    </div>
+  );
 
-      {hasTranscript && (
-        <details open className="panel group overflow-hidden">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 sm:px-6">
-            <span className="text-sm font-bold">
-              خروجی متن ({segments.length} بخش)
-              {loading ? <span className="mr-2 text-xs font-normal text-muted-foreground"> (در حال تکمیل…)</span> : null}
-            </span>
-            <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-          </summary>
-          <div className="border-t border-border px-5 pb-5 pt-4 sm:px-6">
-            <div className="mb-3 flex items-center gap-2">
-              <div className="relative flex-1">
-                <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  type="search"
-                  value={segmentQuery}
-                  onChange={(e) => setSegmentQuery(e.target.value)}
-                  placeholder="جستجو در جمله‌ها…"
-                  className="w-full rounded-xl border border-border bg-card py-2.5 pr-10 pl-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                />
-              </div>
-            </div>
-
-            {filteredSegments.length === 0 ? (
-              <p className="py-4 text-center text-sm text-muted-foreground">موردی یافت نشد.</p>
-            ) : (
-              <ul ref={listRef} className="max-h-80 space-y-2 overflow-y-auto pt-3 pb-16">
-                {filteredSegments.map(({ s, i }) => (
-                  <SegmentRow
-                    key={i}
-                    seg={s}
-                    index={i}
-                    isActive={i === activeSegmentIndex}
-                    hasAudio={!!audioUrl}
-                    cardRef={
-                      i === activeSegmentIndex
-                        ? (el) => {
-                            activeCardRef.current = el;
-                          }
-                        : undefined
-                    }
-                    onSeek={seekTo}
-                    onPlayOnly={playSegmentOnly}
-                    onPlayContinue={playSegmentContinue}
-                    onChange={updateSegmentText}
-                  />
-                ))}
-              </ul>
-            )}
-            {segmentQuery.trim() && (
-              <p className="mt-2 text-xs text-muted-foreground">
-                {filteredSegments.length} از {segments.length} مورد
-              </p>
-            )}
-
-            <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-border pt-4">
-              {!loading && (
-                <button onClick={() => downloadSubtitle("srt")} className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary">
-                  <Download className="size-4" /> SRT
-                </button>
-              )}
-              {!loading && (
-                <button onClick={() => downloadSubtitle("txt")} className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary">
-                  <Download className="size-4" /> TXT
-                </button>
-              )}
-              {!loading && (
-                <button
-                  onClick={() => void runAnalysis("quick")}
-                  disabled={analyzing || segments.length === 0}
-                  className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary disabled:opacity-50"
-                >
-                  {analyzing ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-                  {analyzing ? "در حال تحلیل…" : "تحلیل متن"}
-                </button>
-              )}
-              <button
-                onClick={copy}
-                disabled={segments.length === 0}
-                className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-              >
-                {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-                {copied ? "کپی شد" : "کپی"}
-              </button>
+  const textColumn = hasTranscript ? (
+    <div className="flex flex-col gap-6">
+      <details open className="panel group overflow-hidden lg:min-h-[70vh]">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 sm:px-6">
+          <span className="text-sm font-bold">
+            خروجی متن ({segments.length} بخش)
+            {loading ? <span className="mr-2 text-xs font-normal text-muted-foreground"> (در حال تکمیل…)</span> : null}
+          </span>
+          <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="border-t border-border px-5 pb-5 pt-4 sm:px-6">
+          <div className="mb-3 flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="search"
+                value={segmentQuery}
+                onChange={(e) => setSegmentQuery(e.target.value)}
+                placeholder="جستجو در جمله‌ها…"
+                className="w-full rounded-xl border border-border bg-card py-2.5 pr-10 pl-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
             </div>
           </div>
-        </details>
-      )}
+
+          {filteredSegments.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">موردی یافت نشد.</p>
+          ) : (
+            <ul
+              ref={listRef}
+              className="max-h-80 space-y-2 overflow-y-auto pt-3 pb-16 lg:max-h-[calc(100vh-16rem)]"
+            >
+              {filteredSegments.map(({ s, i }) => (
+                <SegmentRow
+                  key={i}
+                  seg={s}
+                  index={i}
+                  isActive={i === activeSegmentIndex}
+                  hasAudio={!!audioUrl}
+                  cardRef={
+                    i === activeSegmentIndex
+                      ? (el) => {
+                          activeCardRef.current = el;
+                        }
+                      : undefined
+                  }
+                  onSeek={seekTo}
+                  onPlayOnly={playSegmentOnly}
+                  onPlayContinue={playSegmentContinue}
+                  onChange={updateSegmentText}
+                />
+              ))}
+            </ul>
+          )}
+          {segmentQuery.trim() && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              {filteredSegments.length} از {segments.length} مورد
+            </p>
+          )}
+
+          <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-border pt-4">
+            {!loading && (
+              <button onClick={() => downloadSubtitle("srt")} className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary">
+                <Download className="size-4" /> SRT
+              </button>
+            )}
+            {!loading && (
+              <button onClick={() => downloadSubtitle("txt")} className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary">
+                <Download className="size-4" /> TXT
+              </button>
+            )}
+            {!loading && (
+              <button
+                onClick={() => void runAnalysis("quick")}
+                disabled={analyzing || segments.length === 0}
+                className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary disabled:opacity-50"
+              >
+                {analyzing ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+                {analyzing ? "در حال تحلیل…" : "تحلیل متن"}
+              </button>
+            )}
+            <button
+              onClick={copy}
+              disabled={segments.length === 0}
+              className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+              {copied ? "کپی شد" : "کپی"}
+            </button>
+          </div>
+        </div>
+      </details>
 
       {analysisError && (
         <div className="whitespace-pre-wrap rounded-2xl border border-destructive/30 bg-destructive/10 p-5 text-sm text-destructive">
@@ -1052,6 +1041,33 @@ function Index() {
             </div>
           </div>
         </details>
+      )}
+    </div>
+  ) : null;
+
+  return (
+    <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-5 py-12">
+      <header className="text-center">
+        <div className="flex justify-end">
+          <ThemeToggle />
+        </div>
+        <h1 className="text-4xl font-black tracking-tight sm:text-5xl">VoicePluss</h1>
+        <p className="mx-auto mt-4 max-w-xl text-base leading-8 text-muted-foreground">
+          VoicePluss — ضبط یا آپلود فایل صوتی و دریافت متن فارسی دقیق. فایل‌های طولانی
+          به‌صورت خودکار تقسیم و متن‌ها ادغام می‌شوند.
+        </p>
+      </header>
+
+      {hasTranscript ? (
+        <div
+          className="grid gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,0.95fr)]"
+          dir="ltr"
+        >
+          <div dir="rtl">{textColumn}</div>
+          <div dir="rtl">{controlsColumn}</div>
+        </div>
+      ) : (
+        <div className="mx-auto w-full max-w-3xl">{controlsColumn}</div>
       )}
 
       <footer className="mt-auto pt-4 text-center text-xs text-muted-foreground">
