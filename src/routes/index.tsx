@@ -671,74 +671,82 @@ function Index() {
 
   const controlsColumn = (
     <div className="flex flex-col gap-6">
-      <section className="panel p-6 sm:p-8">
-        <div className="flex flex-col items-center gap-5">
-          <button
-            onClick={recording ? stopRecording : startRecording}
-            disabled={loading}
-            aria-label={recording ? "توقف ضبط" : "شروع ضبط"}
-            className={`flex size-24 items-center justify-center rounded-full transition-all disabled:opacity-50 ${
-              recording
-                ? "recording-pulse bg-destructive text-destructive-foreground"
-                : "bg-primary text-primary-foreground hover:scale-105"
-            }`}
-            style={{ boxShadow: recording ? undefined : "var(--shadow-glow)" }}
-          >
-            {recording ? <Square className="size-8" /> : <Mic className="size-9" />}
-          </button>
-          <p className="text-sm text-muted-foreground">
-            {recording ? `در حال ضبط… ${formatTime(elapsed)}` : "برای شروع ضبط کلیک کنید"}
-          </p>
+      <details open className="panel group overflow-hidden">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 sm:px-6">
+          <span className="text-sm font-bold">
+            {recording ? `در حال ضبط… ${formatTime(elapsed)}` : "شروع ضبط و بارگذاری فایل"}
+          </span>
+          <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="border-t border-border px-5 pb-5 pt-4 sm:px-6">
+          <div className="flex flex-col items-center gap-5">
+            <button
+              onClick={recording ? stopRecording : startRecording}
+              disabled={loading}
+              aria-label={recording ? "توقف ضبط" : "شروع ضبط"}
+              className={`flex size-24 items-center justify-center rounded-full transition-all disabled:opacity-50 ${
+                recording
+                  ? "recording-pulse bg-destructive text-destructive-foreground"
+                  : "bg-primary text-primary-foreground hover:scale-105"
+              }`}
+              style={{ boxShadow: recording ? undefined : "var(--shadow-glow)" }}
+            >
+              {recording ? <Square className="size-8" /> : <Mic className="size-9" />}
+            </button>
+            <p className="text-sm text-muted-foreground">
+              {recording ? `در حال ضبط… ${formatTime(elapsed)}` : "برای شروع ضبط کلیک کنید"}
+            </p>
 
-          <div className="flex w-full flex-col items-center gap-4 border-t border-border pt-5 sm:flex-row sm:justify-between">
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2.5 text-sm font-medium text-surface-foreground transition-colors hover:bg-secondary">
-              <Upload className="size-4" />
-              آپلود فایل صوتی
-              <input
-                type="file"
-                accept="audio/*,video/mp4,.m4a,.mp3,.wav,.ogg,.webm"
-                className="hidden"
-                disabled={loading}
-                onChange={(e) => onFile(e.target.files?.[0])}
-              />
-            </label>
-
-            <div className="flex flex-wrap items-center justify-center gap-4 text-sm">
-              <div className="flex items-center gap-2">
-                <span className="text-muted-foreground">مدل:</span>
-                <select
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  disabled={loading}
-                  className="rounded-xl border border-border bg-card px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-                >
-                  {MODELS.map((m) => (
-                    <option key={m.id} value={m.id}>{m.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-muted-foreground">طول هر بخش:</span>
+            <div className="flex w-full flex-col items-center gap-4 border-t border-border pt-5 sm:flex-row sm:justify-between">
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2.5 text-sm font-medium text-surface-foreground transition-colors hover:bg-secondary">
+                <Upload className="size-4" />
+                آپلود فایل صوتی
                 <input
-                  type="number"
-                  min={1}
-                  max={13}
-                  step={1}
-                  value={partMinutes}
+                  type="file"
+                  accept="audio/*,video/mp4,.m4a,.mp3,.wav,.ogg,.webm"
+                  className="hidden"
                   disabled={loading}
-                  onChange={(e) => {
-                    const v = Number(e.target.value);
-                    setPartMinutes(Number.isFinite(v) ? clampPartMinutes(v) : DEFAULT_PART_MINUTES);
-                  }}
-                  className="w-16 rounded-xl border border-border bg-card px-2 py-2 text-center text-sm outline-none focus:ring-2 focus:ring-ring"
-                  title="مدت هر بخش بر حسب دقیقه (۱ تا ۱۳)"
+                  onChange={(e) => onFile(e.target.files?.[0])}
                 />
-                <span className="text-muted-foreground">دقیقه</span>
+              </label>
+
+              <div className="flex flex-wrap items-center justify-center gap-4 text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">مدل:</span>
+                  <select
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    disabled={loading}
+                    className="rounded-xl border border-border bg-card px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    {MODELS.map((m) => (
+                      <option key={m.id} value={m.id}>{m.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">طول هر بخش:</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={13}
+                    step={1}
+                    value={partMinutes}
+                    disabled={loading}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      setPartMinutes(Number.isFinite(v) ? clampPartMinutes(v) : DEFAULT_PART_MINUTES);
+                    }}
+                    className="w-16 rounded-xl border border-border bg-card px-2 py-2 text-center text-sm outline-none focus:ring-2 focus:ring-ring"
+                    title="مدت هر بخش بر حسب دقیقه (۱ تا ۱۳)"
+                  />
+                  <span className="text-muted-foreground">دقیقه</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </section>
+      </details>
 
       {pendingFile && !loading && (
         <section className="panel p-5 sm:p-6">
@@ -898,7 +906,7 @@ function Index() {
 
   const textColumn = hasTranscript ? (
     <div className="flex flex-col gap-6">
-      <details open className="panel group overflow-hidden lg:min-h-[70vh]">
+      <details open className="panel group overflow-hidden">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 sm:px-6">
           <span className="text-sm font-bold">
             خروجی متن ({segments.length} بخش)
@@ -925,7 +933,7 @@ function Index() {
           ) : (
             <ul
               ref={listRef}
-              className="max-h-80 space-y-2 overflow-y-auto pt-3 pb-16 lg:max-h-[calc(100vh-16rem)]"
+              className="max-h-[22rem] space-y-2 overflow-y-auto"
             >
               {filteredSegments.map(({ s, i }) => (
                 <SegmentRow
