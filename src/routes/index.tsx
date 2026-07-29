@@ -20,7 +20,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { encodeWav } from "@/lib/wav";
-import { toSrt, toTxt, downloadText } from "@/lib/subtitles";
+import { toSrt, toTxt, downloadText, parseSrt } from "@/lib/subtitles";
 import { prepareAudioForTranscription, DEFAULT_PART_MINUTES, clampPartMinutes } from "@/lib/splitAudio";
 
 export const Route = createFileRoute("/")({
@@ -148,6 +148,90 @@ async function transcribeOne(
   throw lastError ?? new Error("خطای ناشناخته در تبدیل");
 }
 
+function SegmentRow({
+  seg,
+  index,
+  isActive,
+  hasAudio,
+  cardRef,
+  onSeek,
+  onPlayOnly,
+  onPlayContinue,
+  onChange,
+}: {
+  seg: Segment;
+  index: number;
+  isActive: boolean;
+  hasAudio: boolean;
+  cardRef?: (el: HTMLLIElement | null) => void;
+  onSeek: (t: number) => void;
+  onPlayOnly: (s: Segment) => void;
+  onPlayContinue: (s: Segment) => void;
+  onChange: (index: number, value: string) => void;
+}) {
+  const [draft, setDraft] = useState(seg.text);
+  const [editing, setEditing] = useState(false);
+
+  // متن ویرایش‌نشده را با تغییرات بیرونی همگام کن (ولی وسط تایپ کاربر هرگز)
+  useEffect(() => {
+    if (!editing) setDraft(seg.text);
+  }, [seg.text, editing]);
+
+  return (
+    <li
+      ref={cardRef}
+      className={`scroll-mt-4 rounded-xl border p-3 text-sm transition-colors ${
+        isActive
+          ? "border-primary bg-primary/10 ring-1 ring-primary/40"
+          : "border-transparent bg-surface hover:bg-secondary/60"
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        <button
+          type="button"
+          onClick={() => onSeek(seg.start)}
+          className="shrink-0 pt-1.5 font-mono text-xs text-muted-foreground hover:text-primary"
+          title="پرش به این بخش"
+        >
+          {formatTime(seg.start)}
+        </button>
+        <textarea
+          value={draft}
+          onFocus={() => setEditing(true)}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            onChange(index, e.target.value);
+          }}
+          onBlur={() => setEditing(false)}
+          rows={2}
+          className="min-w-0 flex-1 resize-y rounded-lg border border-transparent bg-transparent p-1.5 text-right text-sm leading-7 outline-none focus:border-border focus:bg-card focus:ring-2 focus:ring-ring"
+          dir="rtl"
+        />
+        <div className="flex shrink-0 flex-col gap-1.5">
+          <button
+            type="button"
+            onClick={() => onPlayOnly(seg)}
+            disabled={!hasAudio}
+            className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2 py-1 text-[11px] font-medium transition-colors hover:bg-primary hover:text-primary-foreground disabled:opacity-40"
+            title="فقط همین متن پخش شود"
+          >
+            <Play className="size-3" /> پخش متن
+          </button>
+          <button
+            type="button"
+            onClick={() => onPlayContinue(seg)}
+            disabled={!hasAudio}
+            className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2 py-1 text-[11px] font-medium transition-colors hover:bg-primary hover:text-primary-foreground disabled:opacity-40"
+            title="از این متن به بعد پخش شود"
+          >
+            <SkipForward className="size-3" /> پخش و ادامه
+          </button>
+        </div>
+      </div>
+    </li>
+  );
+}
+
 function Index() {
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -167,6 +251,7 @@ function Index() {
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [analysisCopied, setAnalysisCopied] = useState(false);
   const [segmentQuery, setSegmentQuery] = useState("");
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
 
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -184,6 +269,7 @@ function Index() {
   const audioUrlRef = useRef<string | null>(null);
   const activeCardRef = useRef<HTMLLIElement | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
+  const stopAtRef = useRef<number | null>(null);
 
   const revokeAudioUrl = useCallback(() => {
     if (audioUrlRef.current) {
@@ -245,7 +331,10 @@ function Index() {
     const list = listRef.current;
     const card = activeCardRef.current;
     if (!list || !card) return;
-    list.scrollTo({ top: Math.max(0, card.offsetTop - list.offsetTop), behavior: "smooth" });
+    list.scrollTo({
+      top: Math.max(0, card.offsetTop - list.offsetTop - 24),
+      behavior: "smooth",
+    });
   }, [activeSegmentIndex]);
 
   const cancelJob = useCallback(() => {
@@ -282,16 +371,26 @@ function Index() {
     [rebuildTextFromSegments, clearAnalysis, pausePlayback],
   );
 
-  const playSegment = useCallback(
-    (start: number) => {
+  const playFrom = useCallback(
+    (start: number, stopAt: number | null) => {
       const el = playerRef.current;
       if (!el || !audioUrl) return;
       const next = Math.max(0, Math.min(el.duration || 0, start));
+      stopAtRef.current = stopAt;
       el.currentTime = next;
       setCurrentTime(next);
       void el.play().catch(() => setPlaying(false));
     },
     [audioUrl],
+  );
+
+  const playSegmentOnly = useCallback(
+    (s: Segment) => playFrom(s.start, s.end),
+    [playFrom],
+  );
+  const playSegmentContinue = useCallback(
+    (s: Segment) => playFrom(s.start, null),
+    [playFrom],
   );
 
   const togglePlay = useCallback(() => {
