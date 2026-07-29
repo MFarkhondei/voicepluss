@@ -22,6 +22,8 @@ import {
 import { encodeWav } from "@/lib/wav";
 import { toSrt, toTxt, downloadText, parseSrt } from "@/lib/subtitles";
 import { prepareAudioForTranscription, DEFAULT_PART_MINUTES, clampPartMinutes } from "@/lib/splitAudio";
+import { ThemeToggle } from "@/components/ThemeToggle";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -212,21 +214,24 @@ function SegmentRow({
             type="button"
             onClick={() => onPlayOnly(seg)}
             disabled={!hasAudio}
-            className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2 py-1 text-[11px] font-medium transition-colors hover:bg-primary hover:text-primary-foreground disabled:opacity-40"
+            aria-label="فقط همین متن پخش شود"
+            className="inline-flex size-8 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-primary hover:text-primary-foreground disabled:opacity-40"
             title="فقط همین متن پخش شود"
           >
-            <Play className="size-3" /> پخش متن
+            <Play className="size-4" />
           </button>
           <button
             type="button"
             onClick={() => onPlayContinue(seg)}
             disabled={!hasAudio}
-            className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2 py-1 text-[11px] font-medium transition-colors hover:bg-primary hover:text-primary-foreground disabled:opacity-40"
+            aria-label="از این متن به بعد پخش شود"
+            className="inline-flex size-8 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-primary hover:text-primary-foreground disabled:opacity-40"
             title="از این متن به بعد پخش شود"
           >
-            <SkipForward className="size-3" /> پخش و ادامه
+            <SkipForward className="size-4" />
           </button>
         </div>
+
       </div>
     </li>
   );
@@ -671,12 +676,16 @@ function Index() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-6 px-5 py-12">
       <header className="text-center">
+        <div className="flex justify-end">
+          <ThemeToggle />
+        </div>
         <h1 className="text-4xl font-black tracking-tight sm:text-5xl">VoicePluss</h1>
         <p className="mx-auto mt-4 max-w-xl text-base leading-8 text-muted-foreground">
           VoicePluss — ضبط یا آپلود فایل صوتی و دریافت متن فارسی دقیق. فایل‌های طولانی
           به‌صورت خودکار تقسیم و متن‌ها ادغام می‌شوند.
         </p>
       </header>
+
 
       <section className="panel p-6 sm:p-8">
         <div className="flex flex-col items-center gap-5">

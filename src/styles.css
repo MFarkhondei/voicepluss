@@ -102,6 +102,39 @@
   --sidebar-ring: oklch(0.56 0.115 187);
 }
 
+.dark {
+  --background: oklch(0.19 0.022 210);
+  --foreground: oklch(0.95 0.012 95);
+  --card: oklch(0.235 0.025 208);
+  --card-foreground: oklch(0.95 0.012 95);
+  --popover: oklch(0.235 0.025 208);
+  --popover-foreground: oklch(0.95 0.012 95);
+  --primary: oklch(0.7 0.115 187);
+  --primary-foreground: oklch(0.18 0.03 200);
+  --secondary: oklch(0.29 0.03 200);
+  --secondary-foreground: oklch(0.93 0.015 95);
+  --muted: oklch(0.28 0.025 205);
+  --muted-foreground: oklch(0.72 0.03 190);
+  --accent: oklch(0.74 0.15 62);
+  --accent-foreground: oklch(0.2 0.05 60);
+  --destructive: oklch(0.6 0.19 25);
+  --destructive-foreground: oklch(0.98 0.01 90);
+  --border: oklch(0.34 0.028 205);
+  --input: oklch(0.34 0.028 205);
+  --ring: oklch(0.7 0.115 187);
+  --surface: oklch(0.24 0.025 208);
+  --surface-foreground: oklch(0.93 0.02 195);
+  --sidebar: oklch(0.235 0.025 208);
+  --sidebar-foreground: oklch(0.95 0.012 95);
+  --sidebar-primary: oklch(0.7 0.115 187);
+  --sidebar-primary-foreground: oklch(0.18 0.03 200);
+  --sidebar-accent: oklch(0.29 0.03 200);
+  --sidebar-accent-foreground: oklch(0.93 0.015 95);
+  --sidebar-border: oklch(0.34 0.028 205);
+  --sidebar-ring: oklch(0.7 0.115 187);
+}
+
+
 @layer base {
   * {
     border-color: var(--color-border);
