@@ -352,11 +352,6 @@ function Index() {
     return list.map((s) => s.text.trim()).filter(Boolean).join(" ").trim();
   }, []);
 
-  const pausePlayback = useCallback(() => {
-    const el = playerRef.current;
-    if (!el) return;
-    if (!el.paused) el.pause();
-  }, []);
 
   const updateSegmentText = useCallback(
     (index: number, value: string) => {
