@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 // Edge-compatible: no fs / child_process / ffmpeg.
-// Client splits long audio into configurable WAV parts under 24 MiB.
+// Client splits long audio into WAV parts under 24 MiB.
 
 const MAX_BYTES = 24 * 1024 * 1024;
 const MAX_RETRIES = 4;
@@ -9,11 +9,18 @@ const TIMEOUT_MS = 240_000;
 
 type Segment = { start: number; end: number; text: string };
 
+function normalizeLanguage(raw: unknown): string {
+  const v = String(raw ?? "fa").trim().toLowerCase();
+  if (v === "en" || v === "english" || v === "انگلیسی") return "en";
+  return "fa";
+}
+
 async function callGroq(
   file: File | Blob,
   filename: string,
   apiKey: string,
   model: string,
+  language: string,
 ): Promise<{ text: string; duration: number | null; segments: Segment[] }> {
   let lastError = "unknown";
 
@@ -21,7 +28,7 @@ async function callGroq(
     const upstream = new FormData();
     upstream.append("file", file, filename);
     upstream.append("model", model);
-    upstream.append("language", "fa");
+    upstream.append("language", language);
     upstream.append("response_format", "verbose_json");
     upstream.append("temperature", "0");
 
@@ -40,7 +47,6 @@ async function callGroq(
       if (!res.ok) {
         const detail = await res.text().catch(() => "");
         lastError = `status ${res.status}: ${detail.slice(0, 400)}`;
-        // Don't retry hard client errors except rate limit
         if (res.status >= 400 && res.status < 500 && res.status !== 429) {
           throw new Error(lastError);
         }
@@ -117,10 +123,11 @@ export const Route = createFileRoute("/api/transcribe")({
         }
 
         const model = String(form.get("model") || "whisper-large-v3");
+        const language = normalizeLanguage(form.get("language"));
         const filename = file.name || "audio.wav";
 
         try {
-          const result = await callGroq(file, filename, apiKey, model);
+          const result = await callGroq(file, filename, apiKey, model, language);
           return Response.json(result);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
