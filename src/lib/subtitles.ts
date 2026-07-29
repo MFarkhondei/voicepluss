@@ -54,3 +54,30 @@ export function downloadText(content: string, filename: string, mime: string) {
   a.remove();
   URL.revokeObjectURL(url);
 }
+
+function parseStamp(v: string) {
+  const m = v.trim().replace(",", ".").match(/(\d+):(\d+):(\d+(?:\.\d+)?)/);
+  if (!m) return 0;
+  return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+}
+
+/** خواندن فایل SRT یا VTT و تبدیل به سگمنت‌ها */
+export function parseSrt(content: string): Segment[] {
+  const blocks = content
+    .replace(/^\uFEFF/, "")
+    .replace(/\r/g, "")
+    .replace(/^WEBVTT.*\n/, "")
+    .split(/\n{2,}/);
+  const out: Segment[] = [];
+  for (const block of blocks) {
+    const lines = block.split("\n").filter((l) => l.trim() !== "");
+    if (lines.length === 0) continue;
+    const idx = lines.findIndex((l) => l.includes("-->"));
+    if (idx === -1) continue;
+    const [a, b] = lines[idx].split("-->");
+    const text = lines.slice(idx + 1).join(" ").trim();
+    if (!text) continue;
+    out.push({ start: parseStamp(a), end: parseStamp(b), text });
+  }
+  return out;
+}
