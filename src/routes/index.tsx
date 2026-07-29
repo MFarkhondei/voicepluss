@@ -360,7 +360,6 @@ function Index() {
 
   const updateSegmentText = useCallback(
     (index: number, value: string) => {
-      pausePlayback();
       setSegments((prev) => {
         const next = prev.map((s, i) => (i === index ? { ...s, text: value } : s));
         setText(rebuildTextFromSegments(next));
@@ -368,7 +367,7 @@ function Index() {
       });
       clearAnalysis();
     },
-    [rebuildTextFromSegments, clearAnalysis, pausePlayback],
+    [rebuildTextFromSegments, clearAnalysis],
   );
 
   const playFrom = useCallback(
@@ -397,6 +396,7 @@ function Index() {
     const el = playerRef.current;
     if (!el || !audioUrl) return;
     if (el.paused) {
+      stopAtRef.current = null;
       void el.play().catch(() => setPlaying(false));
     } else {
       el.pause();
@@ -610,7 +610,39 @@ function Index() {
 
   const onFile = (file?: File) => {
     if (!file) return;
+    cancelJob();
+    setError(null);
+    setText("");
+    setSegments([]);
+    setSegmentQuery("");
+    clearAnalysis();
+    setFileName(file.name);
+    setSourceFromBlob(file);
+    setPendingFile(file);
+  };
+
+  const startTranscription = () => {
+    const file = pendingFile;
+    if (!file) return;
+    setPendingFile(null);
     void send(file, file.name);
+  };
+
+  const onSrtFile = async (file?: File) => {
+    if (!file) return;
+    try {
+      const parsed = parseSrt(await file.text());
+      if (parsed.length === 0) {
+        setError("فایل زیرنویس معتبر نبود یا خالی است.");
+        return;
+      }
+      setSegments(parsed);
+      setText(parsed.map((s) => s.text.trim()).filter(Boolean).join(" ").trim());
+      setError(null);
+      setPendingFile(null);
+    } catch {
+      setError("خواندن فایل زیرنویس ممکن نشد.");
+    }
   };
 
   const copy = async () => {
@@ -720,6 +752,38 @@ function Index() {
         </div>
       </section>
 
+      {pendingFile && !loading && (
+        <section className="panel p-5 sm:p-6">
+          <p className="text-sm font-bold">
+            فایل صوتی «{pendingFile.name}» بارگذاری شد.
+          </p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            آیا فایل زیرنویس (SRT) این صوت را دارید؟ اگر دارید آن را بارگذاری کنید تا
+            بدون تبدیل مجدد نمایش داده شود.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary">
+              <Upload className="size-4" />
+              بارگذاری فایل SRT
+              <input
+                type="file"
+                accept=".srt,.vtt,text/plain"
+                className="hidden"
+                onChange={(e) => void onSrtFile(e.target.files?.[0])}
+              />
+            </label>
+            <button
+              type="button"
+              onClick={startTranscription}
+              className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+            >
+              <Sparkles className="size-4" />
+              شروع خروجی متن
+            </button>
+          </div>
+        </section>
+      )}
+
       {audioUrl && (
         <details open className="panel group overflow-hidden">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 sm:px-6">
@@ -732,7 +796,18 @@ function Index() {
               src={audioUrl}
               preload="metadata"
               onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
-              onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime || 0)}
+              onTimeUpdate={(e) => {
+                const el = e.currentTarget;
+                const stopAt = stopAtRef.current;
+                if (stopAt != null && el.currentTime >= stopAt) {
+                  stopAtRef.current = null;
+                  el.pause();
+                  el.currentTime = stopAt;
+                  setCurrentTime(stopAt);
+                  return;
+                }
+                setCurrentTime(el.currentTime || 0);
+              }}
               onPlay={() => setPlaying(true)}
               onPause={() => setPlaying(false)}
               onEnded={() => setPlaying(false)}
@@ -835,13 +910,58 @@ function Index() {
         <details open className="panel group overflow-hidden">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 sm:px-6">
             <span className="text-sm font-bold">
-              زمان‌بندی جمله‌ها ({segments.length} بخش)
+              خروجی متن ({segments.length} بخش)
               {loading ? <span className="mr-2 text-xs font-normal text-muted-foreground"> (در حال تکمیل…)</span> : null}
             </span>
             <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
           </summary>
           <div className="border-t border-border px-5 pb-5 pt-4 sm:px-6">
-            <div className="mb-4 flex flex-wrap justify-end gap-2">
+            <div className="mb-3 flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="search"
+                  value={segmentQuery}
+                  onChange={(e) => setSegmentQuery(e.target.value)}
+                  placeholder="جستجو در جمله‌ها…"
+                  className="w-full rounded-xl border border-border bg-card py-2.5 pr-10 pl-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+            </div>
+
+            {filteredSegments.length === 0 ? (
+              <p className="py-4 text-center text-sm text-muted-foreground">موردی یافت نشد.</p>
+            ) : (
+              <ul ref={listRef} className="max-h-80 space-y-2 overflow-y-auto pt-3 pb-16">
+                {filteredSegments.map(({ s, i }) => (
+                  <SegmentRow
+                    key={i}
+                    seg={s}
+                    index={i}
+                    isActive={i === activeSegmentIndex}
+                    hasAudio={!!audioUrl}
+                    cardRef={
+                      i === activeSegmentIndex
+                        ? (el) => {
+                            activeCardRef.current = el;
+                          }
+                        : undefined
+                    }
+                    onSeek={seekTo}
+                    onPlayOnly={playSegmentOnly}
+                    onPlayContinue={playSegmentContinue}
+                    onChange={updateSegmentText}
+                  />
+                ))}
+              </ul>
+            )}
+            {segmentQuery.trim() && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                {filteredSegments.length} از {segments.length} مورد
+              </p>
+            )}
+
+            <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-border pt-4">
               {!loading && (
                 <button onClick={() => downloadSubtitle("srt")} className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary">
                   <Download className="size-4" /> SRT
@@ -871,74 +991,6 @@ function Index() {
                 {copied ? "کپی شد" : "کپی"}
               </button>
             </div>
-
-            <div className="mb-3 flex items-center gap-2">
-              <div className="relative flex-1">
-                <Search className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  type="search"
-                  value={segmentQuery}
-                  onChange={(e) => setSegmentQuery(e.target.value)}
-                  placeholder="جستجو در جمله‌ها…"
-                  className="w-full rounded-xl border border-border bg-card py-2.5 pr-10 pl-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                />
-              </div>
-            </div>
-
-            {filteredSegments.length === 0 ? (
-              <p className="py-4 text-center text-sm text-muted-foreground">موردی یافت نشد.</p>
-            ) : (
-              <ul ref={listRef} className="max-h-80 space-y-2 overflow-y-auto pb-16">
-                {filteredSegments.map(({ s, i }) => {
-                  const isActive = i === activeSegmentIndex;
-                  return (
-                    <li
-                      key={i}
-                      ref={isActive ? activeCardRef : undefined}
-                      className={`rounded-xl border p-3 text-sm transition-colors ${
-                        isActive
-                          ? "border-primary bg-primary/10 ring-1 ring-primary/40"
-                          : "border-transparent bg-surface hover:bg-secondary/60"
-                      }`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <button
-                          type="button"
-                          onClick={() => seekTo(s.start)}
-                          className="shrink-0 pt-1.5 font-mono text-xs text-muted-foreground hover:text-primary"
-                          title="پرش به این بخش"
-                        >
-                          {formatTime(s.start)}
-                        </button>
-                        <textarea
-                          value={s.text}
-                          onFocus={pausePlayback}
-                          onChange={(e) => updateSegmentText(i, e.target.value)}
-                          rows={2}
-                          className="min-w-0 flex-1 resize-y rounded-lg border border-transparent bg-transparent p-1.5 text-right text-sm leading-7 outline-none focus:border-border focus:bg-card focus:ring-2 focus:ring-ring"
-                          dir="rtl"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => playSegment(s.start)}
-                          disabled={!audioUrl}
-                          className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-border bg-card text-foreground transition-colors hover:bg-primary hover:text-primary-foreground disabled:opacity-40"
-                          title="پخش این جمله"
-                          aria-label="پخش این جمله"
-                        >
-                          <Play className="size-3.5 ml-0.5" />
-                        </button>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-            {segmentQuery.trim() && (
-              <p className="mt-2 text-xs text-muted-foreground">
-                {filteredSegments.length} از {segments.length} مورد
-              </p>
-            )}
           </div>
         </details>
       )}
