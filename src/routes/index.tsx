@@ -212,21 +212,24 @@ function SegmentRow({
             type="button"
             onClick={() => onPlayOnly(seg)}
             disabled={!hasAudio}
-            className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2 py-1 text-[11px] font-medium transition-colors hover:bg-primary hover:text-primary-foreground disabled:opacity-40"
+            aria-label="فقط همین متن پخش شود"
+            className="inline-flex size-8 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-primary hover:text-primary-foreground disabled:opacity-40"
             title="فقط همین متن پخش شود"
           >
-            <Play className="size-3" /> پخش متن
+            <Play className="size-4" />
           </button>
           <button
             type="button"
             onClick={() => onPlayContinue(seg)}
             disabled={!hasAudio}
-            className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2 py-1 text-[11px] font-medium transition-colors hover:bg-primary hover:text-primary-foreground disabled:opacity-40"
+            aria-label="از این متن به بعد پخش شود"
+            className="inline-flex size-8 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-primary hover:text-primary-foreground disabled:opacity-40"
             title="از این متن به بعد پخش شود"
           >
-            <SkipForward className="size-3" /> پخش و ادامه
+            <SkipForward className="size-4" />
           </button>
         </div>
+
       </div>
     </li>
   );
