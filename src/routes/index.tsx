@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Mic,
   Square,
@@ -255,8 +255,9 @@ function Index() {
   const [analysisCopied, setAnalysisCopied] = useState(false);
   const [segmentQuery, setSegmentQuery] = useState("");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
-  /** حداقل ارتفاع خروجی متن؛ با جمع شدن کادرهای ضبط/پخش کم نمی‌شود */
-  const [textFloorH, setTextFloorH] = useState<number | null>(null);
+  /** ارتفاع قفل‌شده خروجی متن روی دسکتاپ؛ فقط زیاد می‌شود */
+  const [textLockH, setTextLockH] = useState<number | null>(null);
+  const [isDesktop, setIsDesktop] = useState(false);
 
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -276,6 +277,7 @@ function Index() {
   const listRef = useRef<HTMLUListElement | null>(null);
   const stopAtRef = useRef<number | null>(null);
   const panelsRef = useRef<HTMLDivElement | null>(null);
+  const textLockHRef = useRef<number | null>(null);
 
   const revokeAudioUrl = useCallback(() => {
     if (audioUrlRef.current) {
@@ -306,6 +308,14 @@ function Index() {
   }, []);
 
   useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const apply = () => setIsDesktop(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+
+  useEffect(() => {
     const el = playerRef.current;
     if (!el) return;
     el.playbackRate = playbackRate;
@@ -331,7 +341,6 @@ function Index() {
     return -1;
   }, [segments, currentTime]);
 
-  // جملهٔ در حال پخش را به ابتدای ناحیهٔ اسکرول ببر
   useEffect(() => {
     if (activeSegmentIndex < 0) return;
     const list = listRef.current;
@@ -343,20 +352,35 @@ function Index() {
     });
   }, [activeSegmentIndex]);
 
-  // ارتفاع اولیه = جمع ضبط + پخش؛ فقط افزایش می‌یابد، با جمع‌شدن کم نمی‌شود
-  useEffect(() => {
+  // ارتفاع خروجی متن = ارتفاع جمع کادر ضبط + پخش؛ فقط زیاد می‌شود، با جمع‌شدن کم نمی‌شود
+  useLayoutEffect(() => {
+    if (segments.length === 0) {
+      textLockHRef.current = null;
+      setTextLockH(null);
+      return;
+    }
     const el = panelsRef.current;
-    if (!el || segments.length === 0) return;
-    const update = () => {
-      const h = el.offsetHeight;
+    if (!el) return;
+
+    const measure = () => {
+      const h = Math.round(el.getBoundingClientRect().height);
       if (h <= 0) return;
-      setTextFloorH((prev) => (prev == null ? h : Math.max(prev, h)));
+      const next = textLockHRef.current == null ? h : Math.max(textLockHRef.current, h);
+      if (next !== textLockHRef.current) {
+        textLockHRef.current = next;
+        setTextLockH(next);
+      }
     };
-    update();
-    const ro = new ResizeObserver(update);
+
+    measure();
+    const raf = requestAnimationFrame(() => requestAnimationFrame(measure));
+    const ro = new ResizeObserver(measure);
     ro.observe(el);
-    return () => ro.disconnect();
-  }, [segments.length, audioUrl, recording, pendingFile]);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
+  }, [segments.length, audioUrl, recording, pendingFile, isDesktop]);
 
   const cancelJob = useCallback(() => {
     abortRef.current?.abort();
@@ -458,7 +482,8 @@ function Index() {
       setFileName(name);
       setProgressLabel(null);
       setProgressPct(0);
-      setTextFloorH(null);
+      textLockHRef.current = null;
+      setTextLockH(null);
       clearAnalysis();
 
       try {
@@ -631,7 +656,8 @@ function Index() {
     setText("");
     setSegments([]);
     setSegmentQuery("");
-    setTextFloorH(null);
+    textLockHRef.current = null;
+    setTextLockH(null);
     clearAnalysis();
     setFileName(file.name);
     setSourceFromBlob(file);
@@ -927,19 +953,22 @@ function Index() {
     </div>
   );
 
+  const lockedStyle =
+    isDesktop && textLockH
+      ? ({ height: textLockH, minHeight: textLockH } as React.CSSProperties)
+      : undefined;
+
   const textPanel = hasTranscript ? (
-    <details
-      open
+    <div
       className="panel group flex flex-col overflow-hidden"
-      style={textFloorH ? { minHeight: textFloorH } : undefined}
+      style={lockedStyle}
     >
-      <summary className="flex shrink-0 cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 sm:px-6">
+      <div className="flex shrink-0 items-center justify-between gap-3 px-5 py-4 sm:px-6">
         <span className="text-sm font-bold">
           خروجی متن ({segments.length} بخش)
           {loading ? <span className="mr-2 text-xs font-normal text-muted-foreground"> (در حال تکمیل…)</span> : null}
         </span>
-        <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-      </summary>
+      </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-border px-5 pb-5 pt-4 sm:px-6">
         <div className="mb-3 flex shrink-0 items-center gap-2">
           <div className="relative flex-1">
@@ -959,8 +988,7 @@ function Index() {
         ) : (
           <ul
             ref={listRef}
-            className="min-h-0 flex-1 space-y-2 overflow-y-auto"
-            style={textFloorH ? { maxHeight: Math.max(180, textFloorH - 180) } : { maxHeight: "22rem" }}
+            className={`min-h-0 space-y-2 overflow-y-auto ${isDesktop && textLockH ? "flex-1" : "max-h-[22rem]"}`}
           >
             {filteredSegments.map(({ s, i }) => (
               <SegmentRow
@@ -1021,7 +1049,7 @@ function Index() {
           </button>
         </div>
       </div>
-    </details>
+    </div>
   ) : null;
 
   const analysisPanel = (
@@ -1100,12 +1128,10 @@ function Index() {
           className="grid gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,0.95fr)]"
           dir="ltr"
         >
-          {/* موبایل: بعد از کنترل‌ها؛ دسکتاپ: ستون چپ */}
           <div dir="rtl" className="order-2 flex flex-col gap-6 lg:order-1">
             {textPanel}
             {analysisPanel}
           </div>
-          {/* موبایل: اول (ضبط + پخش)؛ دسکتاپ: ستون راست */}
           <div dir="rtl" className="order-1 lg:order-2">
             {controlsColumn}
           </div>
