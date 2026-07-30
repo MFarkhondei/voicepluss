@@ -1,9 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-/** بهبود متن: اصلاح املا/علائم + تفکیک گویندگان با مدل زبانی Groq */
+/** بهبود متن: اصلاح املا/علائم + تفکیک گویندگان
+ * زنجیره مدل‌ها: اگر یکی محدود/خطا داد، بعدی امتحان می‌شود.
+ */
 
-const MODEL = "llama-3.3-70b-versatile";
-const BATCH = 40;
+/** مدل‌های Groq به‌ترتیب اولویت — سبک‌ترها معمولاً TPM بالاتر دارند */
+const MODELS = [
+  "llama-3.3-70b-versatile",
+  "llama-3.1-8b-instant",
+  "gemma2-9b-it",
+] as const;
+
+const BATCH = 28;
 
 type InSeg = { i: number; text: string };
 type OutSeg = { i: number; text: string; speaker?: string | null };
@@ -30,14 +38,19 @@ function systemPrompt(language: string, diarize: boolean) {
   ].join(" ");
 }
 
-function friendlyError(status: number, detail: string): string {
+function isRateLimit(status: number, detail: string): boolean {
   const lower = detail.toLowerCase();
-  if (
+  return (
     status === 429 ||
     lower.includes("rate limit") ||
     lower.includes("tokens per minute") ||
-    lower.includes("tpm")
-  ) {
+    lower.includes("tpm") ||
+    lower.includes("too many requests")
+  );
+}
+
+function friendlyError(status: number, detail: string): string {
+  if (isRateLimit(status, detail)) {
     return "به علت محدودیت سرویس امکان اصلاح متن وجود ندارد. چند لحظه بعد دوباره تلاش کنید.";
   }
   if (status === 401 || status === 403) {
@@ -49,12 +62,22 @@ function friendlyError(status: number, detail: string): string {
   return "خطا در بهبود متن. لطفاً دوباره تلاش کنید.";
 }
 
-async function callGroq(apiKey: string, batch: InSeg[], language: string, diarize: boolean): Promise<OutSeg[]> {
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function callModel(
+  apiKey: string,
+  model: string,
+  batch: InSeg[],
+  language: string,
+  diarize: boolean,
+): Promise<OutSeg[]> {
   const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: MODEL,
+      model,
       temperature: 0.1,
       response_format: { type: "json_object" },
       messages: [
@@ -65,12 +88,53 @@ async function callGroq(apiKey: string, batch: InSeg[], language: string, diariz
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
-    throw new Error(friendlyError(res.status, detail));
+    const err = new Error(friendlyError(res.status, detail)) as Error & {
+      status?: number;
+      rateLimited?: boolean;
+    };
+    err.status = res.status;
+    err.rateLimited = isRateLimit(res.status, detail);
+    throw err;
   }
   const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
   const raw = data.choices?.[0]?.message?.content ?? "{}";
-  const parsed = JSON.parse(raw) as { segments?: OutSeg[] };
+  let parsed: { segments?: OutSeg[] };
+  try {
+    parsed = JSON.parse(raw) as { segments?: OutSeg[] };
+  } catch {
+    throw new Error("پاسخ نامعتبر از مدل بهبود متن");
+  }
   return Array.isArray(parsed.segments) ? parsed.segments : [];
+}
+
+/** تلاش با چند مدل؛ در صورت rate-limit کوتاه صبر و مدل بعدی */
+async function callWithFallback(
+  apiKey: string,
+  batch: InSeg[],
+  language: string,
+  diarize: boolean,
+): Promise<OutSeg[]> {
+  let lastError: Error | null = null;
+  for (let m = 0; m < MODELS.length; m++) {
+    const model = MODELS[m];
+    try {
+      return await callModel(apiKey, model, batch, language, diarize);
+    } catch (e) {
+      lastError = e instanceof Error ? e : new Error(String(e));
+      const rateLimited = (e as { rateLimited?: boolean })?.rateLimited === true;
+      console.warn(`[refine] model ${model} failed:`, lastError.message);
+      if (rateLimited && m < MODELS.length - 1) {
+        await sleep(1500);
+        continue;
+      }
+      // خطای غیر rate-limit هم با مدل بعدی امتحان می‌شود
+      if (m < MODELS.length - 1) {
+        await sleep(400);
+        continue;
+      }
+    }
+  }
+  throw lastError ?? new Error("خطا در بهبود متن. لطفاً دوباره تلاش کنید.");
 }
 
 export const Route = createFileRoute("/api/refine")({
@@ -94,14 +158,13 @@ export const Route = createFileRoute("/api/refine")({
         if (segments.length === 0) return Response.json({ error: "متنی برای بهبود ارسال نشده است." }, { status: 400 });
 
         const language = body.language === "en" ? "en" : "fa";
-        // فقط وقتی کاربر صریحاً فعال کرده باشد
         const diarize = body.diarize === true;
 
         try {
           const out: OutSeg[] = [];
           for (let i = 0; i < segments.length; i += BATCH) {
             const batch = segments.slice(i, i + BATCH);
-            const result = await callGroq(apiKey, batch, language, diarize);
+            const result = await callWithFallback(apiKey, batch, language, diarize);
             const byIndex = new Map(result.map((r) => [r.i, r]));
             for (const s of batch) {
               const r = byIndex.get(s.i);
@@ -111,17 +174,19 @@ export const Route = createFileRoute("/api/refine")({
                 speaker: diarize && r?.speaker ? String(r.speaker).slice(0, 40) : null,
               });
             }
+            // فاصله کوتاه بین batchها برای کاهش فشار TPM
+            if (i + BATCH < segments.length) await sleep(300);
           }
           return Response.json({ segments: out });
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           console.error("[refine]", message);
-          // اگر پیام از friendlyError آمده، همان را برگردان؛ در غیر این صورت پیام عمومی
           const isFriendly =
             message.includes("محدودیت سرویس") ||
             message.includes("دسترسی به سرویس") ||
             message.includes("موقتاً در دسترس") ||
-            message.includes("دوباره تلاش");
+            message.includes("دوباره تلاش") ||
+            message.includes("پاسخ نامعتبر");
           return Response.json(
             { error: isFriendly ? message : "خطا در بهبود متن. لطفاً دوباره تلاش کنید." },
             { status: 502 },
