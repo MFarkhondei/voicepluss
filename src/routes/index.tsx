@@ -753,18 +753,36 @@ function Index() {
   );
 
   return (
-    <main className="mx-auto flex min-h-screen w-full min-w-0 max-w-7xl flex-col gap-6 overflow-x-hidden px-2.5 py-8 sm:px-3 sm:py-12">
+    <main className="mx-auto flex min-h-dvh w-full min-w-0 max-w-7xl flex-col gap-6 overflow-x-hidden px-2.5 py-8 sm:px-3 sm:py-12">
+      <a href="#transcript" className="sr-only-focusable rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">پرش به خروجی متن</a>
+      <p aria-live="polite" className="sr-only">{status}</p>
       <header className="min-w-0 text-center">
-        <div className="flex justify-end"><ThemeToggle /></div>
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={() => setShowShortcuts((v) => !v)} aria-expanded={showShortcuts} aria-label="راهنمای میانبرهای صفحه‌کلید" title="میانبرهای صفحه‌کلید (?)" className="inline-flex size-10 items-center justify-center rounded-full border border-border bg-card transition-colors hover:bg-primary hover:text-primary-foreground">
+            <Keyboard className="size-5" aria-hidden="true" />
+          </button>
+          <ContrastToggle />
+          <ThemeToggle />
+        </div>
         <h1 className="text-4xl font-black tracking-tight sm:text-5xl">VoicePluss</h1>
         <p className="mx-auto mt-4 max-w-xl px-1 text-base leading-8 text-muted-foreground">VoicePluss — ضبط یا آپلود صوت/ویدیو و دریافت متن فارسی یا انگلیسی. فایل‌های طولانی به‌صورت خودکار تقسیم و متن‌ها ادغام می‌شوند.</p>
+        {showShortcuts && (
+          <ul className="panel mx-auto mt-4 max-w-md space-y-1.5 p-4 text-right text-sm">
+            <li><kbd className="rounded border border-border bg-surface px-1.5 font-mono">Space</kbd> — پخش / توقف</li>
+            <li><kbd className="rounded border border-border bg-surface px-1.5 font-mono">→ / ←</kbd> — ۱۰ ثانیه عقب / جلو</li>
+            <li><kbd className="rounded border border-border bg-surface px-1.5 font-mono">Ctrl+S</kbd> — ذخیرهٔ فایل متنی</li>
+            <li><kbd className="rounded border border-border bg-surface px-1.5 font-mono">Ctrl+E</kbd> — ذخیرهٔ فایل زیرنویس</li>
+            <li><kbd className="rounded border border-border bg-surface px-1.5 font-mono">?</kbd> — نمایش همین راهنما</li>
+          </ul>
+        )}
       </header>
       {hasTranscript ? (
-        <div className="grid w-full min-w-0 gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,0.95fr)]" dir="ltr">
+        <div id="transcript" className="grid w-full min-w-0 gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,0.95fr)]" dir="ltr">
           <div dir="rtl" className="order-2 flex min-w-0 w-full flex-col gap-6 lg:order-1">{textPanel}{analysisPanel}</div>
           <div dir="rtl" className="order-1 min-w-0 w-full lg:order-2">{controlsColumn}</div>
         </div>
       ) : (
+
         <div className="mx-auto w-full min-w-0 max-w-3xl">{controlsColumn}</div>
       )}
       <footer className="mt-auto pt-4 text-center text-xs text-muted-foreground">VoicePluss — فایل‌ها فقط برای پردازش ارسال می‌شوند. از ویدیو فقط صوت استخراج می‌شود.</footer>
