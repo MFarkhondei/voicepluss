@@ -41,10 +41,8 @@ type Segment = { start: number; end: number; text: string };
 type AnalysisMode = "quick" | "full";
 type OutputLanguage = "fa" | "en";
 
-const MODELS = [
-  { id: "whisper-large-v3", label: "دقت بالا (whisper-large-v3)" },
-  { id: "whisper-large-v3-turbo", label: "سریع (whisper-large-v3-turbo)" },
-];
+/** همیشه دقت بالا */
+const TRANSCRIBE_MODEL = "whisper-large-v3";
 
 const LANGUAGES: { id: OutputLanguage; label: string }[] = [
   { id: "fa", label: "فارسی" },
@@ -71,7 +69,6 @@ function sleep(ms: number) {
 async function transcribeOne(
   blob: Blob,
   name: string,
-  model: string,
   language: OutputLanguage,
   signal?: AbortSignal,
 ): Promise<{ text: string; segments: Segment[]; duration: number | null }> {
@@ -80,7 +77,7 @@ async function transcribeOne(
     if (signal?.aborted) throw new Error(CANCEL_MSG);
     const form = new FormData();
     form.append("file", blob, name);
-    form.append("model", model);
+    form.append("model", TRANSCRIBE_MODEL);
     form.append("language", language);
     const controller = new AbortController();
     const onAbort = () => controller.abort();
@@ -154,7 +151,6 @@ function Index() {
   const [segments, setSegments] = useState<Segment[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
-  const [model, setModel] = useState(MODELS[0].id);
   const [language, setLanguage] = useState<OutputLanguage>("fa");
   const [copied, setCopied] = useState(false);
   const [analysis, setAnalysis] = useState<string | null>(null);
@@ -335,7 +331,7 @@ function Index() {
         setProgressLabel(parts.length === 1 ? "در حال تبدیل…" : `در حال تبدیل بخش ${i + 1} از ${parts.length}…`);
         setProgressPct(Math.round((i / parts.length) * 100));
         try {
-          const result = await transcribeOne(part.blob, part.name, model, language, ac.signal);
+          const result = await transcribeOne(part.blob, part.name, language, ac.signal);
           if (result.text) textParts.push(result.text);
           for (const s of result.segments) {
             allSegments.push({ start: s.start + part.offsetSeconds, end: s.end + part.offsetSeconds, text: s.text });
@@ -363,7 +359,7 @@ function Index() {
       setProgressLabel(null);
       if (abortRef.current === ac) abortRef.current = null;
     }
-  }, [model, language, cancelJob, clearAnalysis, setSourceFromBlob]);
+  }, [language, cancelJob, clearAnalysis, setSourceFromBlob]);
 
   const runAnalysis = useCallback(async (mode: AnalysisMode = "quick") => {
     const payload = text.trim() || segments.map((s) => s.text.trim()).filter(Boolean).join(" ").trim();
@@ -497,19 +493,11 @@ function Index() {
                   <Upload className="size-4 shrink-0" /> آپلود صوت یا ویدیو
                   <input type="file" accept="audio/*,video/*,.m4a,.mp3,.wav,.ogg,.webm,.mp4,.mov,.mkv,.avi" className="hidden" disabled={loading} onChange={(e) => onFile(e.target.files?.[0])} />
                 </label>
-                <div className="flex min-w-0 flex-wrap items-center justify-center gap-3 text-sm sm:gap-4">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className="shrink-0 text-muted-foreground">مدل:</span>
-                    <select value={model} onChange={(e) => setModel(e.target.value)} disabled={loading} className="max-w-[min(100%,12rem)] rounded-xl border border-border bg-card px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-ring sm:px-3">
-                      {MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-                    </select>
-                  </div>
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className="shrink-0 text-muted-foreground">زبان:</span>
-                    <select value={language} onChange={(e) => setLanguage(e.target.value as OutputLanguage)} disabled={loading} className="max-w-[min(100%,8rem)] rounded-xl border border-border bg-card px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-ring sm:px-3" title="زبان متن خروجی">
-                      {LANGUAGES.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
-                    </select>
-                  </div>
+                <div className="flex min-w-0 items-center gap-2 text-sm">
+                  <span className="shrink-0 text-muted-foreground">زبان خروجی:</span>
+                  <select value={language} onChange={(e) => setLanguage(e.target.value as OutputLanguage)} disabled={loading} className="max-w-[min(100%,8rem)] rounded-xl border border-border bg-card px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-ring sm:px-3" title="زبان متن خروجی">
+                    {LANGUAGES.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
+                  </select>
                 </div>
               </div>
             </div>
