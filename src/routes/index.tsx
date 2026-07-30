@@ -27,7 +27,6 @@ import { prepareAudioForTranscription, DEFAULT_PART_MINUTES } from "@/lib/splitA
 import { extractPeaks } from "@/lib/waveform";
 import { Waveform } from "@/components/Waveform";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { ContrastToggle } from "@/components/ContrastToggle";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -229,7 +228,6 @@ function Index() {
   const textLockHRef = useRef<number | null>(null);
   const peakJobRef = useRef(0);
 
-  /** skipPeaks=true هنگام تبدیل تا دیکود همزمان باعث کرش حافظه نشود */
   const setSourceFromBlob = useCallback((blob: Blob, opts?: { skipPeaks?: boolean }) => {
     if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
     const url = URL.createObjectURL(blob);
@@ -416,7 +414,6 @@ function Index() {
     cancelJob();
     const ac = new AbortController();
     abortRef.current = ac;
-    // بدون دیکود موج همزمان با prepare — جلوگیری از Aw, Snap!
     setSourceFromBlob(blob, { skipPeaks: true });
     setLoading(true);
     setError(null);
@@ -442,7 +439,6 @@ function Index() {
       const { parts } = prepared;
       if (parts.length === 0) throw new Error("فایل صوتی خالی یا نامعتبر است.");
 
-      // موج را از بخش کوچک WAV بساز (نه از کل ویدیو)
       if (parts[0]?.blob) loadPeaksFromBlob(parts[0].blob);
 
       const allSegments: Segment[] = [];
@@ -555,7 +551,6 @@ function Index() {
     setTextLockH(null);
     clearAnalysis();
     setFileName(file.name);
-    // پیش‌نمایش: برای فایل‌های خیلی بزرگ دیکود موج انجام نمی‌شود (داخل extractPeaks)
     setSourceFromBlob(file);
     setPendingFile(file);
   };
@@ -629,8 +624,9 @@ function Index() {
         togglePlay();
         return;
       }
-      if (e.key === "ArrowRight" && audioUrl) { e.preventDefault(); skip(-SKIP_SECONDS); return; }
-      if (e.key === "ArrowLeft" && audioUrl) { e.preventDefault(); skip(SKIP_SECONDS); return; }
+      // → جلو ، ← عقب
+      if (e.key === "ArrowRight" && audioUrl) { e.preventDefault(); skip(SKIP_SECONDS); return; }
+      if (e.key === "ArrowLeft" && audioUrl) { e.preventDefault(); skip(-SKIP_SECONDS); return; }
       if (e.key === "?") { e.preventDefault(); setShowShortcuts((v) => !v); }
     };
     window.addEventListener("keydown", onKey);
@@ -837,7 +833,6 @@ function Index() {
           <button type="button" onClick={() => setShowShortcuts((v) => !v)} aria-expanded={showShortcuts} aria-label="راهنمای میانبرهای صفحه‌کلید" title="میانبرهای صفحه‌کلید (?)" className="inline-flex size-10 items-center justify-center rounded-full border border-border bg-card transition-colors hover:bg-primary hover:text-primary-foreground">
             <Keyboard className="size-5" aria-hidden="true" />
           </button>
-          <ContrastToggle />
           <ThemeToggle />
         </div>
         <h1 className="text-4xl font-black tracking-tight sm:text-5xl">VoicePluss</h1>
@@ -845,7 +840,8 @@ function Index() {
         {showShortcuts && (
           <ul className="panel mx-auto mt-4 max-w-md space-y-1.5 p-4 text-right text-sm">
             <li><kbd className="rounded border border-border bg-surface px-1.5 font-mono">Space</kbd> — پخش / توقف</li>
-            <li><kbd className="rounded border border-border bg-surface px-1.5 font-mono">→ / ←</kbd> — ۱۰ ثانیه عقب / جلو</li>
+            <li><kbd className="rounded border border-border bg-surface px-1.5 font-mono">→</kbd> — ۱۰ ثانیه جلو</li>
+            <li><kbd className="rounded border border-border bg-surface px-1.5 font-mono">←</kbd> — ۱۰ ثانیه عقب</li>
             <li><kbd className="rounded border border-border bg-surface px-1.5 font-mono">Ctrl+S</kbd> — ذخیرهٔ فایل متنی</li>
             <li><kbd className="rounded border border-border bg-surface px-1.5 font-mono">Ctrl+E</kbd> — ذخیرهٔ فایل زیرنویس</li>
             <li><kbd className="rounded border border-border bg-surface px-1.5 font-mono">?</kbd> — نمایش همین راهنما</li>
