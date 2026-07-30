@@ -18,11 +18,17 @@ import {
   Gauge,
   Search,
   ChevronDown,
+  Wand2,
+  Keyboard,
 } from "lucide-react";
 import { encodeWav } from "@/lib/wav";
 import { toSrt, toTxt, downloadText, parseSrt } from "@/lib/subtitles";
 import { prepareAudioForTranscription, DEFAULT_PART_MINUTES } from "@/lib/splitAudio";
+import { extractPeaks } from "@/lib/waveform";
+import { Waveform } from "@/components/Waveform";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { ContrastToggle } from "@/components/ContrastToggle";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
