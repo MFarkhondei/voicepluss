@@ -177,6 +177,13 @@ function Index() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
+  const [peaks, setPeaks] = useState<number[]>([]);
+  const [peaksLoading, setPeaksLoading] = useState(false);
+  const [refining, setRefining] = useState(false);
+  const [refineError, setRefineError] = useState<string | null>(null);
+  const [diarize, setDiarize] = useState(true);
+  const [status, setStatus] = useState("");
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -191,6 +198,7 @@ function Index() {
   const stopAtRef = useRef<number | null>(null);
   const panelsRef = useRef<HTMLDivElement | null>(null);
   const textLockHRef = useRef<number | null>(null);
+  const peakJobRef = useRef(0);
 
   const setSourceFromBlob = useCallback((blob: Blob) => {
     if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
@@ -201,7 +209,14 @@ function Index() {
     setCurrentTime(0);
     setDuration(0);
     setPlaybackRate(1);
+    const job = ++peakJobRef.current;
+    setPeaks([]);
+    setPeaksLoading(true);
+    void extractPeaks(blob, 160)
+      .then((p) => { if (peakJobRef.current === job) setPeaks(p); })
+      .finally(() => { if (peakJobRef.current === job) setPeaksLoading(false); });
   }, []);
+
 
   useEffect(() => () => { if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current); }, []);
   useEffect(() => {
