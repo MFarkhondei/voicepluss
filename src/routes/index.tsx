@@ -18,11 +18,17 @@ import {
   Gauge,
   Search,
   ChevronDown,
+  Wand2,
+  Keyboard,
 } from "lucide-react";
 import { encodeWav } from "@/lib/wav";
 import { toSrt, toTxt, downloadText, parseSrt } from "@/lib/subtitles";
 import { prepareAudioForTranscription, DEFAULT_PART_MINUTES } from "@/lib/splitAudio";
+import { extractPeaks } from "@/lib/waveform";
+import { Waveform } from "@/components/Waveform";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { ContrastToggle } from "@/components/ContrastToggle";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -37,7 +43,7 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
-type Segment = { start: number; end: number; text: string };
+type Segment = { start: number; end: number; text: string; speaker?: string | null };
 type AnalysisMode = "quick" | "full";
 type OutputLanguage = "fa" | "en";
 
@@ -128,17 +134,21 @@ function SegmentRow({
   const [editing, setEditing] = useState(false);
   useEffect(() => { if (!editing) setDraft(seg.text); }, [seg.text, editing]);
   return (
-    <li ref={cardRef} className={`scroll-mt-4 rounded-xl border p-3 text-sm transition-colors ${isActive ? "border-primary bg-primary/10 ring-1 ring-primary/40" : "border-transparent bg-surface hover:bg-secondary/60"}`}>
+    <li ref={cardRef} aria-current={isActive ? "true" : undefined} className={`scroll-mt-4 rounded-xl border p-3 text-sm transition-colors ${isActive ? "border-primary bg-primary/10 ring-1 ring-primary/40" : "border-transparent bg-surface hover:bg-secondary/60"}`}>
+      {seg.speaker ? (
+        <p className="mb-1.5 inline-flex items-center rounded-full bg-accent/15 px-2 py-0.5 text-xs font-bold text-accent">{seg.speaker}</p>
+      ) : null}
       <div className="flex min-w-0 items-start gap-2 sm:gap-3">
-        <button type="button" onClick={() => onSeek(seg.start)} className="shrink-0 pt-1.5 font-mono text-xs text-muted-foreground hover:text-primary" title="پرش به این بخش">{formatTime(seg.start)}</button>
-        <textarea value={draft} onFocus={() => setEditing(true)} onChange={(e) => { setDraft(e.target.value); onChange(index, e.target.value); }} onBlur={() => setEditing(false)} rows={2} className="min-w-0 flex-1 resize-y rounded-lg border border-transparent bg-transparent p-1.5 text-right text-sm leading-7 outline-none focus:border-border focus:bg-card focus:ring-2 focus:ring-ring" dir="rtl" />
+        <button type="button" onClick={() => onSeek(seg.start)} aria-label={`پرش به دقیقه ${formatTime(seg.start)}`} className="shrink-0 pt-1.5 font-mono text-xs text-muted-foreground hover:text-primary focus-visible:ring-2 focus-visible:ring-ring" title="پرش به این بخش">{formatTime(seg.start)}</button>
+        <textarea value={draft} aria-label={`متن بخش ${index + 1} از دقیقه ${formatTime(seg.start)}`} onFocus={() => setEditing(true)} onChange={(e) => { setDraft(e.target.value); onChange(index, e.target.value); }} onBlur={() => setEditing(false)} rows={2} className="min-w-0 flex-1 resize-y rounded-lg border border-transparent bg-transparent p-1.5 text-right text-sm leading-7 outline-none focus:border-border focus:bg-card focus:ring-2 focus:ring-ring" dir="rtl" />
         <div className="flex shrink-0 flex-col gap-1.5">
-          <button type="button" onClick={() => onPlayOnly(seg)} disabled={!hasAudio} aria-label="فقط همین متن پخش شود" className="inline-flex size-8 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-primary hover:text-primary-foreground disabled:opacity-40" title="فقط همین متن پخش شود"><Play className="size-4" /></button>
-          <button type="button" onClick={() => onPlayContinue(seg)} disabled={!hasAudio} aria-label="از این متن به بعد پخش شود" className="inline-flex size-8 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-primary hover:text-primary-foreground disabled:opacity-40" title="از این متن به بعد پخش شود"><SkipForward className="size-4" /></button>
+          <button type="button" onClick={() => onPlayOnly(seg)} disabled={!hasAudio} aria-label="فقط همین متن پخش شود" className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40" title="فقط همین متن پخش شود"><Play className="size-4" aria-hidden="true" /></button>
+          <button type="button" onClick={() => onPlayContinue(seg)} disabled={!hasAudio} aria-label="از این متن به بعد پخش شود" className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40" title="از این متن به بعد پخش شود"><SkipForward className="size-4" aria-hidden="true" /></button>
         </div>
       </div>
     </li>
   );
+
 }
 
 function Index() {
@@ -167,6 +177,13 @@ function Index() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
+  const [peaks, setPeaks] = useState<number[]>([]);
+  const [peaksLoading, setPeaksLoading] = useState(false);
+  const [refining, setRefining] = useState(false);
+  const [refineError, setRefineError] = useState<string | null>(null);
+  const [diarize, setDiarize] = useState(true);
+  const [status, setStatus] = useState("");
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -181,6 +198,7 @@ function Index() {
   const stopAtRef = useRef<number | null>(null);
   const panelsRef = useRef<HTMLDivElement | null>(null);
   const textLockHRef = useRef<number | null>(null);
+  const peakJobRef = useRef(0);
 
   const setSourceFromBlob = useCallback((blob: Blob) => {
     if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
@@ -191,7 +209,14 @@ function Index() {
     setCurrentTime(0);
     setDuration(0);
     setPlaybackRate(1);
+    const job = ++peakJobRef.current;
+    setPeaks([]);
+    setPeaksLoading(true);
+    void extractPeaks(blob, 160)
+      .then((p) => { if (peakJobRef.current === job) setPeaks(p); })
+      .finally(() => { if (peakJobRef.current === job) setPeaksLoading(false); });
   }, []);
+
 
   useEffect(() => () => { if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current); }, []);
   useEffect(() => {
@@ -289,6 +314,54 @@ function Index() {
     el.currentTime = next;
     setCurrentTime(next);
   }, []);
+  const seekRatio = useCallback((ratio: number) => {
+    const el = playerRef.current;
+    if (!el) return;
+    const total = el.duration || duration || 0;
+    stopAtRef.current = null;
+    const next = Math.max(0, Math.min(total, ratio * total));
+    el.currentTime = next;
+    setCurrentTime(next);
+  }, [duration]);
+
+  /** نقطه‌گذاری خودکار + تفکیک گویندگان */
+  const refineTranscript = useCallback(async () => {
+    if (segments.length === 0 || refining) return;
+    setRefining(true);
+    setRefineError(null);
+    setStatus("در حال نقطه‌گذاری و تفکیک گویندگان…");
+    try {
+      const res = await fetch("/api/refine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          segments: segments.map((s, i) => ({ i, text: s.text })),
+          language,
+          diarize,
+        }),
+      });
+      let data: any;
+      try { data = await res.json(); } catch { throw new Error(`پاسخ نامعتبر از سرور (کد ${res.status})`); }
+      if (!res.ok) throw new Error(data?.error || `خطا در بهبود متن (${res.status})`);
+      const map = new Map<number, { text: string; speaker?: string | null }>(
+        (data.segments ?? []).map((s: any) => [Number(s.i), { text: String(s.text ?? ""), speaker: s.speaker ?? null }]),
+      );
+      const next = segments.map((s, i) => {
+        const r = map.get(i);
+        return r ? { ...s, text: r.text.trim() || s.text, speaker: r.speaker ?? null } : s;
+      });
+      setSegments(next);
+      setText(rebuildTextFromSegments(next));
+      setStatus("متن نقطه‌گذاری شد.");
+    } catch (e) {
+      setRefineError(e instanceof Error ? e.message : "خطای ناشناخته در بهبود متن");
+      setStatus("بهبود متن ناموفق بود.");
+    } finally {
+      setRefining(false);
+    }
+  }, [segments, refining, language, diarize, rebuildTextFromSegments]);
+
+
 
   const filteredSegments = useMemo(() => {
     const q = segmentQuery.trim().toLowerCase();
@@ -474,6 +547,43 @@ function Index() {
 
   const hasTranscript = segments.length > 0;
 
+  /** میانبرهای صفحه‌کلید */
+  useEffect(() => {
+    const isTyping = (el: EventTarget | null) => {
+      const node = el as HTMLElement | null;
+      if (!node) return false;
+      const tag = node.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || node.isContentEditable;
+    };
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        if (segments.length > 0) { downloadSubtitle("txt"); setStatus("فایل متن ذخیره شد."); }
+        return;
+      }
+      if (mod && e.key.toLowerCase() === "e") {
+        e.preventDefault();
+        if (segments.length > 0) { downloadSubtitle("srt"); setStatus("فایل زیرنویس ذخیره شد."); }
+        return;
+      }
+      if (isTyping(e.target) || mod || e.altKey) return;
+      if (e.key === " ") {
+        if (!audioUrl) return;
+        e.preventDefault();
+        togglePlay();
+        return;
+      }
+      if (e.key === "ArrowRight" && audioUrl) { e.preventDefault(); skip(-SKIP_SECONDS); return; }
+      if (e.key === "ArrowLeft" && audioUrl) { e.preventDefault(); skip(SKIP_SECONDS); return; }
+      if (e.key === "?" ) { e.preventDefault(); setShowShortcuts((v) => !v); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [audioUrl, segments.length, togglePlay, skip, downloadSubtitle]);
+
+
+
   const controlsColumn = (
     <div className="flex min-w-0 w-full flex-col gap-6">
       <div ref={panelsRef} className="flex min-w-0 flex-col gap-6">
@@ -523,7 +633,12 @@ function Index() {
                   {PLAYBACK_RATES.map((r) => <option key={r} value={r}>{r === 1 ? "۱× عادی" : `${r}×`}</option>)}
                 </select>
               </div>
+              <div className="mb-3">
+                <Waveform peaks={peaks} progress={duration > 0 ? Math.min(1, currentTime / duration) : 0} loading={peaksLoading} duration={duration} onSeek={seekRatio} />
+                <p className="mt-1 text-center text-xs text-muted-foreground">برای پرش، روی نمودار موج کلیک کنید یا آن را بکشید.</p>
+              </div>
               <div dir="ltr" className="mb-1 flex min-w-0 items-center gap-2 text-xs font-mono text-muted-foreground sm:gap-3">
+
                 <span className="w-9 shrink-0 tabular-nums sm:w-10">{formatTime(currentTime)}</span>
                 <input type="range" min={0} max={duration || 0} step={0.1} value={Math.min(currentTime, duration || 0)} onChange={(e) => seekTo(Number(e.target.value))} className="h-2 min-w-0 flex-1 cursor-pointer accent-primary" aria-label="موقعیت پخش" />
                 <span className="w-9 shrink-0 text-end tabular-nums sm:w-10">{formatTime(duration)}</span>
@@ -597,12 +712,19 @@ function Index() {
           </ul>
         )}
         {segmentQuery.trim() && <p className="mt-2 shrink-0 text-xs text-muted-foreground">{filteredSegments.length} از {segments.length} مورد</p>}
-        <div className="mt-4 flex shrink-0 flex-wrap justify-end gap-2 border-t border-border pt-4">
-          {!loading && <button onClick={() => downloadSubtitle("srt")} className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary"><Download className="size-4" /> SRT</button>}
-          {!loading && <button onClick={() => downloadSubtitle("txt")} className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary"><Download className="size-4" /> TXT</button>}
-          {!loading && <button onClick={() => void runAnalysis("quick")} disabled={analyzing || segments.length === 0} className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary disabled:opacity-50">{analyzing ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}{analyzing ? "در حال تحلیل…" : "تحلیل متن"}</button>}
-          <button onClick={copy} disabled={segments.length === 0} className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">{copied ? <Check className="size-4" /> : <Copy className="size-4" />}{copied ? "کپی شد" : "کپی"}</button>
+        {refineError && <p role="alert" className="mt-3 shrink-0 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{refineError}</p>}
+        <div className="mt-4 flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
+          <label className="ml-auto inline-flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+            <input type="checkbox" checked={diarize} onChange={(e) => setDiarize(e.target.checked)} className="size-4 accent-primary" />
+            تفکیک گویندگان
+          </label>
+          {!loading && <button onClick={() => void refineTranscript()} disabled={refining || segments.length === 0} aria-label="نقطه‌گذاری خودکار و تفکیک گویندگان" className="inline-flex items-center gap-2 rounded-xl border border-accent/40 bg-accent/10 px-3.5 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/15 disabled:opacity-50">{refining ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Wand2 className="size-4" aria-hidden="true" />}{refining ? "در حال بهبود…" : "نقطه‌گذاری خودکار"}</button>}
+          {!loading && <button onClick={() => downloadSubtitle("srt")} aria-label="دانلود فایل زیرنویس SRT" className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary"><Download className="size-4" aria-hidden="true" /> SRT</button>}
+          {!loading && <button onClick={() => downloadSubtitle("txt")} aria-label="دانلود فایل متنی TXT" className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary"><Download className="size-4" aria-hidden="true" /> TXT</button>}
+          {!loading && <button onClick={() => void runAnalysis("quick")} disabled={analyzing || segments.length === 0} className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary disabled:opacity-50">{analyzing ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Sparkles className="size-4" aria-hidden="true" />}{analyzing ? "در حال تحلیل…" : "تحلیل متن"}</button>}
+          <button onClick={copy} disabled={segments.length === 0} aria-label="کپی متن" className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">{copied ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}{copied ? "کپی شد" : "کپی"}</button>
         </div>
+
       </div>
     </div>
   ) : null;
@@ -631,18 +753,36 @@ function Index() {
   );
 
   return (
-    <main className="mx-auto flex min-h-screen w-full min-w-0 max-w-7xl flex-col gap-6 overflow-x-hidden px-2.5 py-8 sm:px-3 sm:py-12">
+    <main className="mx-auto flex min-h-dvh w-full min-w-0 max-w-7xl flex-col gap-6 overflow-x-hidden px-2.5 py-8 sm:px-3 sm:py-12">
+      <a href="#transcript" className="sr-only-focusable rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">پرش به خروجی متن</a>
+      <p aria-live="polite" className="sr-only">{status}</p>
       <header className="min-w-0 text-center">
-        <div className="flex justify-end"><ThemeToggle /></div>
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={() => setShowShortcuts((v) => !v)} aria-expanded={showShortcuts} aria-label="راهنمای میانبرهای صفحه‌کلید" title="میانبرهای صفحه‌کلید (?)" className="inline-flex size-10 items-center justify-center rounded-full border border-border bg-card transition-colors hover:bg-primary hover:text-primary-foreground">
+            <Keyboard className="size-5" aria-hidden="true" />
+          </button>
+          <ContrastToggle />
+          <ThemeToggle />
+        </div>
         <h1 className="text-4xl font-black tracking-tight sm:text-5xl">VoicePluss</h1>
         <p className="mx-auto mt-4 max-w-xl px-1 text-base leading-8 text-muted-foreground">VoicePluss — ضبط یا آپلود صوت/ویدیو و دریافت متن فارسی یا انگلیسی. فایل‌های طولانی به‌صورت خودکار تقسیم و متن‌ها ادغام می‌شوند.</p>
+        {showShortcuts && (
+          <ul className="panel mx-auto mt-4 max-w-md space-y-1.5 p-4 text-right text-sm">
+            <li><kbd className="rounded border border-border bg-surface px-1.5 font-mono">Space</kbd> — پخش / توقف</li>
+            <li><kbd className="rounded border border-border bg-surface px-1.5 font-mono">→ / ←</kbd> — ۱۰ ثانیه عقب / جلو</li>
+            <li><kbd className="rounded border border-border bg-surface px-1.5 font-mono">Ctrl+S</kbd> — ذخیرهٔ فایل متنی</li>
+            <li><kbd className="rounded border border-border bg-surface px-1.5 font-mono">Ctrl+E</kbd> — ذخیرهٔ فایل زیرنویس</li>
+            <li><kbd className="rounded border border-border bg-surface px-1.5 font-mono">?</kbd> — نمایش همین راهنما</li>
+          </ul>
+        )}
       </header>
       {hasTranscript ? (
-        <div className="grid w-full min-w-0 gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,0.95fr)]" dir="ltr">
+        <div id="transcript" className="grid w-full min-w-0 gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,0.95fr)]" dir="ltr">
           <div dir="rtl" className="order-2 flex min-w-0 w-full flex-col gap-6 lg:order-1">{textPanel}{analysisPanel}</div>
           <div dir="rtl" className="order-1 min-w-0 w-full lg:order-2">{controlsColumn}</div>
         </div>
       ) : (
+
         <div className="mx-auto w-full min-w-0 max-w-3xl">{controlsColumn}</div>
       )}
       <footer className="mt-auto pt-4 text-center text-xs text-muted-foreground">VoicePluss — فایل‌ها فقط برای پردازش ارسال می‌شوند. از ویدیو فقط صوت استخراج می‌شود.</footer>
