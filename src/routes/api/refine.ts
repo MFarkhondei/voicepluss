@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-/** بهبود متن: نقطه‌گذاری خودکار + تفکیک گویندگان با مدل زبانی Groq */
+/** بهبود متن: اصلاح املا/علائم + تفکیک گویندگان با مدل زبانی Groq */
 
 const MODEL = "llama-3.3-70b-versatile";
 const BATCH = 40;
@@ -9,14 +9,22 @@ type InSeg = { i: number; text: string };
 type OutSeg = { i: number; text: string; speaker?: string | null };
 
 function systemPrompt(language: string, diarize: boolean) {
-  const lang = language === "en" ? "English" : "Persian (Farsi)";
+  const isFa = language !== "en";
+  const lang = isFa ? "Persian (Farsi)" : "English";
+  const punct = isFa
+    ? "Use correct Persian punctuation: ، . ؟ ! : ؛ «» — and ZWNJ (نیم‌فاصله) where needed (e.g. می‌شود، کتاب‌ها)."
+    : "Use correct English punctuation and capitalization.";
+  const spelling = isFa
+    ? "Fix common Persian STT spelling errors (همزه، ی/ک عربی vs فارسی، فاصلهٔ اشتباه، تکرار حروف) without changing meaning."
+    : "Fix obvious STT spelling mistakes without changing meaning.";
   return [
     `You clean up raw speech-to-text output in ${lang}.`,
     "For each input segment return the SAME segment index with corrected text.",
-    "Rules: add correct punctuation (، . ؟ ! : «») and capitalization, fix obvious spacing/half-space issues,",
-    "NEVER translate, NEVER summarize, NEVER merge or split segments, NEVER add or remove content words.",
+    punct,
+    spelling,
+    "NEVER translate, NEVER summarize, NEVER merge or split segments, NEVER invent new content words.",
     diarize
-      ? 'Also infer the speaker of each segment from context and return a short stable label in "speaker" (e.g. "گوینده ۱", "گوینده ۲"). Keep the same label for the same person across segments.'
+      ? 'Also infer the speaker of each segment from context and return a short stable label in "speaker" (e.g. "گوینده ۱", "گوینده ۲" for Persian, or "Speaker 1" for English). Keep the same label for the same person across segments.'
       : 'Set "speaker" to null.',
     'Reply with ONLY valid JSON: {"segments":[{"i":number,"text":string,"speaker":string|null}]}',
   ].join(" ");
