@@ -47,7 +47,6 @@ type Segment = {
   end: number;
   text: string;
   speaker?: string | null;
-  /** 0..1 from Whisper avg_logprob; lower = less confident */
   confidence?: number | null;
 };
 type AnalysisMode = "quick" | "full";
@@ -230,7 +229,8 @@ function Index() {
   const textLockHRef = useRef<number | null>(null);
   const peakJobRef = useRef(0);
 
-  const setSourceFromBlob = useCallback((blob: Blob) => {
+  /** skipPeaks=true هنگام تبدیل تا دیکود همزمان باعث کرش حافظه نشود */
+  const setSourceFromBlob = useCallback((blob: Blob, opts?: { skipPeaks?: boolean }) => {
     if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
     const url = URL.createObjectURL(blob);
     audioUrlRef.current = url;
@@ -241,6 +241,18 @@ function Index() {
     setPlaybackRate(1);
     const job = ++peakJobRef.current;
     setPeaks([]);
+    if (opts?.skipPeaks) {
+      setPeaksLoading(false);
+      return;
+    }
+    setPeaksLoading(true);
+    void extractPeaks(blob, 160)
+      .then((p) => { if (peakJobRef.current === job) setPeaks(p); })
+      .finally(() => { if (peakJobRef.current === job) setPeaksLoading(false); });
+  }, []);
+
+  const loadPeaksFromBlob = useCallback((blob: Blob) => {
+    const job = ++peakJobRef.current;
     setPeaksLoading(true);
     void extractPeaks(blob, 160)
       .then((p) => { if (peakJobRef.current === job) setPeaks(p); })
@@ -404,7 +416,8 @@ function Index() {
     cancelJob();
     const ac = new AbortController();
     abortRef.current = ac;
-    setSourceFromBlob(blob);
+    // بدون دیکود موج همزمان با prepare — جلوگیری از Aw, Snap!
+    setSourceFromBlob(blob, { skipPeaks: true });
     setLoading(true);
     setError(null);
     setText("");
@@ -421,11 +434,17 @@ function Index() {
       let prepared;
       try {
         prepared = await prepareAudioForTranscription(blob, base, (msg) => setProgressLabel(msg), DEFAULT_PART_MINUTES);
-      } catch {
+      } catch (prepErr) {
+        const msg = prepErr instanceof Error ? prepErr.message : "";
+        if (msg.includes("حافظه")) throw prepErr;
         throw new Error("امکان استخراج صوت از این فایل در مرورگر وجود ندارد. لطفاً MP3، WAV، یا MP4 سازگار امتحان کنید.");
       }
       const { parts } = prepared;
       if (parts.length === 0) throw new Error("فایل صوتی خالی یا نامعتبر است.");
+
+      // موج را از بخش کوچک WAV بساز (نه از کل ویدیو)
+      if (parts[0]?.blob) loadPeaksFromBlob(parts[0].blob);
+
       const allSegments: Segment[] = [];
       const textParts: string[] = [];
       const failed: string[] = [];
@@ -468,7 +487,7 @@ function Index() {
       setProgressLabel(null);
       if (abortRef.current === ac) abortRef.current = null;
     }
-  }, [language, cancelJob, clearAnalysis, setSourceFromBlob]);
+  }, [language, cancelJob, clearAnalysis, setSourceFromBlob, loadPeaksFromBlob]);
 
   const runAnalysis = useCallback(async (mode: AnalysisMode = "quick") => {
     const payload = text.trim() || segments.map((s) => s.text.trim()).filter(Boolean).join(" ").trim();
@@ -536,6 +555,7 @@ function Index() {
     setTextLockH(null);
     clearAnalysis();
     setFileName(file.name);
+    // پیش‌نمایش: برای فایل‌های خیلی بزرگ دیکود موج انجام نمی‌شود (داخل extractPeaks)
     setSourceFromBlob(file);
     setPendingFile(file);
   };
