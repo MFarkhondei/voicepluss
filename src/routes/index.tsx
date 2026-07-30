@@ -43,7 +43,7 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
-type Segment = { start: number; end: number; text: string };
+type Segment = { start: number; end: number; text: string; speaker?: string | null };
 type AnalysisMode = "quick" | "full";
 type OutputLanguage = "fa" | "en";
 
@@ -134,17 +134,21 @@ function SegmentRow({
   const [editing, setEditing] = useState(false);
   useEffect(() => { if (!editing) setDraft(seg.text); }, [seg.text, editing]);
   return (
-    <li ref={cardRef} className={`scroll-mt-4 rounded-xl border p-3 text-sm transition-colors ${isActive ? "border-primary bg-primary/10 ring-1 ring-primary/40" : "border-transparent bg-surface hover:bg-secondary/60"}`}>
+    <li ref={cardRef} aria-current={isActive ? "true" : undefined} className={`scroll-mt-4 rounded-xl border p-3 text-sm transition-colors ${isActive ? "border-primary bg-primary/10 ring-1 ring-primary/40" : "border-transparent bg-surface hover:bg-secondary/60"}`}>
+      {seg.speaker ? (
+        <p className="mb-1.5 inline-flex items-center rounded-full bg-accent/15 px-2 py-0.5 text-xs font-bold text-accent">{seg.speaker}</p>
+      ) : null}
       <div className="flex min-w-0 items-start gap-2 sm:gap-3">
-        <button type="button" onClick={() => onSeek(seg.start)} className="shrink-0 pt-1.5 font-mono text-xs text-muted-foreground hover:text-primary" title="پرش به این بخش">{formatTime(seg.start)}</button>
-        <textarea value={draft} onFocus={() => setEditing(true)} onChange={(e) => { setDraft(e.target.value); onChange(index, e.target.value); }} onBlur={() => setEditing(false)} rows={2} className="min-w-0 flex-1 resize-y rounded-lg border border-transparent bg-transparent p-1.5 text-right text-sm leading-7 outline-none focus:border-border focus:bg-card focus:ring-2 focus:ring-ring" dir="rtl" />
+        <button type="button" onClick={() => onSeek(seg.start)} aria-label={`پرش به دقیقه ${formatTime(seg.start)}`} className="shrink-0 pt-1.5 font-mono text-xs text-muted-foreground hover:text-primary focus-visible:ring-2 focus-visible:ring-ring" title="پرش به این بخش">{formatTime(seg.start)}</button>
+        <textarea value={draft} aria-label={`متن بخش ${index + 1} از دقیقه ${formatTime(seg.start)}`} onFocus={() => setEditing(true)} onChange={(e) => { setDraft(e.target.value); onChange(index, e.target.value); }} onBlur={() => setEditing(false)} rows={2} className="min-w-0 flex-1 resize-y rounded-lg border border-transparent bg-transparent p-1.5 text-right text-sm leading-7 outline-none focus:border-border focus:bg-card focus:ring-2 focus:ring-ring" dir="rtl" />
         <div className="flex shrink-0 flex-col gap-1.5">
-          <button type="button" onClick={() => onPlayOnly(seg)} disabled={!hasAudio} aria-label="فقط همین متن پخش شود" className="inline-flex size-8 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-primary hover:text-primary-foreground disabled:opacity-40" title="فقط همین متن پخش شود"><Play className="size-4" /></button>
-          <button type="button" onClick={() => onPlayContinue(seg)} disabled={!hasAudio} aria-label="از این متن به بعد پخش شود" className="inline-flex size-8 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-primary hover:text-primary-foreground disabled:opacity-40" title="از این متن به بعد پخش شود"><SkipForward className="size-4" /></button>
+          <button type="button" onClick={() => onPlayOnly(seg)} disabled={!hasAudio} aria-label="فقط همین متن پخش شود" className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40" title="فقط همین متن پخش شود"><Play className="size-4" aria-hidden="true" /></button>
+          <button type="button" onClick={() => onPlayContinue(seg)} disabled={!hasAudio} aria-label="از این متن به بعد پخش شود" className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40" title="از این متن به بعد پخش شود"><SkipForward className="size-4" aria-hidden="true" /></button>
         </div>
       </div>
     </li>
   );
+
 }
 
 function Index() {
