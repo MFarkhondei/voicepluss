@@ -547,6 +547,43 @@ function Index() {
 
   const hasTranscript = segments.length > 0;
 
+  /** میانبرهای صفحه‌کلید */
+  useEffect(() => {
+    const isTyping = (el: EventTarget | null) => {
+      const node = el as HTMLElement | null;
+      if (!node) return false;
+      const tag = node.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || node.isContentEditable;
+    };
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        if (segments.length > 0) { downloadSubtitle("txt"); setStatus("فایل متن ذخیره شد."); }
+        return;
+      }
+      if (mod && e.key.toLowerCase() === "e") {
+        e.preventDefault();
+        if (segments.length > 0) { downloadSubtitle("srt"); setStatus("فایل زیرنویس ذخیره شد."); }
+        return;
+      }
+      if (isTyping(e.target) || mod || e.altKey) return;
+      if (e.key === " ") {
+        if (!audioUrl) return;
+        e.preventDefault();
+        togglePlay();
+        return;
+      }
+      if (e.key === "ArrowRight" && audioUrl) { e.preventDefault(); skip(-SKIP_SECONDS); return; }
+      if (e.key === "ArrowLeft" && audioUrl) { e.preventDefault(); skip(SKIP_SECONDS); return; }
+      if (e.key === "?" ) { e.preventDefault(); setShowShortcuts((v) => !v); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [audioUrl, segments.length, togglePlay, skip, downloadSubtitle]);
+
+
+
   const controlsColumn = (
     <div className="flex min-w-0 w-full flex-col gap-6">
       <div ref={panelsRef} className="flex min-w-0 flex-col gap-6">
