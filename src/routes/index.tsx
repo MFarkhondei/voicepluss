@@ -712,12 +712,19 @@ function Index() {
           </ul>
         )}
         {segmentQuery.trim() && <p className="mt-2 shrink-0 text-xs text-muted-foreground">{filteredSegments.length} از {segments.length} مورد</p>}
-        <div className="mt-4 flex shrink-0 flex-wrap justify-end gap-2 border-t border-border pt-4">
-          {!loading && <button onClick={() => downloadSubtitle("srt")} className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary"><Download className="size-4" /> SRT</button>}
-          {!loading && <button onClick={() => downloadSubtitle("txt")} className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary"><Download className="size-4" /> TXT</button>}
-          {!loading && <button onClick={() => void runAnalysis("quick")} disabled={analyzing || segments.length === 0} className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary disabled:opacity-50">{analyzing ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}{analyzing ? "در حال تحلیل…" : "تحلیل متن"}</button>}
-          <button onClick={copy} disabled={segments.length === 0} className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">{copied ? <Check className="size-4" /> : <Copy className="size-4" />}{copied ? "کپی شد" : "کپی"}</button>
+        {refineError && <p role="alert" className="mt-3 shrink-0 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{refineError}</p>}
+        <div className="mt-4 flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
+          <label className="ml-auto inline-flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+            <input type="checkbox" checked={diarize} onChange={(e) => setDiarize(e.target.checked)} className="size-4 accent-primary" />
+            تفکیک گویندگان
+          </label>
+          {!loading && <button onClick={() => void refineTranscript()} disabled={refining || segments.length === 0} aria-label="نقطه‌گذاری خودکار و تفکیک گویندگان" className="inline-flex items-center gap-2 rounded-xl border border-accent/40 bg-accent/10 px-3.5 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/15 disabled:opacity-50">{refining ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Wand2 className="size-4" aria-hidden="true" />}{refining ? "در حال بهبود…" : "نقطه‌گذاری خودکار"}</button>}
+          {!loading && <button onClick={() => downloadSubtitle("srt")} aria-label="دانلود فایل زیرنویس SRT" className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary"><Download className="size-4" aria-hidden="true" /> SRT</button>}
+          {!loading && <button onClick={() => downloadSubtitle("txt")} aria-label="دانلود فایل متنی TXT" className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary"><Download className="size-4" aria-hidden="true" /> TXT</button>}
+          {!loading && <button onClick={() => void runAnalysis("quick")} disabled={analyzing || segments.length === 0} className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary disabled:opacity-50">{analyzing ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Sparkles className="size-4" aria-hidden="true" />}{analyzing ? "در حال تحلیل…" : "تحلیل متن"}</button>}
+          <button onClick={copy} disabled={segments.length === 0} aria-label="کپی متن" className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">{copied ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}{copied ? "کپی شد" : "کپی"}</button>
         </div>
+
       </div>
     </div>
   ) : null;
