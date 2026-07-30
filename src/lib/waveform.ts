@@ -2,7 +2,7 @@
  * برای فایل‌های بزرگ دیکود کامل انجام نمی‌شود تا تب کروم کرش نکند. */
 
 /** بالای این حجم: فقط الگوی تقریبی (بدون decodeAudioData) */
-const MAX_DECODE_BYTES = 12 * 1024 * 1024;
+const MAX_DECODE_BYTES = 6 * 1024 * 1024;
 
 export async function extractPeaks(blob: Blob, barCount = 120): Promise<number[]> {
   // فایل بزرگ / ویدیو: دیکود دوباره = کرش حافظه (Aw, Snap!)
@@ -14,19 +14,18 @@ export async function extractPeaks(blob: Blob, barCount = 120): Promise<number[]
     const arrayBuffer = await blob.arrayBuffer();
     const ctx = new AudioContext();
     try {
-      const decoded = await ctx.decodeAudioData(arrayBuffer.slice(0));
+      // بدون slice — decodeAudioData بافر را منتقل می‌کند
+      const decoded = await ctx.decodeAudioData(arrayBuffer);
       const channels = decoded.numberOfChannels;
       const length = decoded.length;
       if (length === 0) return fallbackPeaks(blob.size, barCount);
 
-      // نمونه‌برداری تنک: فقط یک نمونه از هر سطل — بدون ساخت آرایهٔ full-length mono
       const bucketSize = Math.max(1, Math.floor(length / barCount));
       const rawPeaks: number[] = [];
       for (let i = 0; i < barCount; i++) {
         const start = i * bucketSize;
         const end = Math.min(length, start + bucketSize);
-        // stride داخل سطل تا حلقه سبک‌تر شود
-        const step = Math.max(1, Math.floor((end - start) / 64));
+        const step = Math.max(1, Math.floor((end - start) / 48));
         let max = 0;
         for (let j = start; j < end; j += step) {
           let sum = 0;
