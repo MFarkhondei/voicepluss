@@ -633,7 +633,12 @@ function Index() {
                   {PLAYBACK_RATES.map((r) => <option key={r} value={r}>{r === 1 ? "۱× عادی" : `${r}×`}</option>)}
                 </select>
               </div>
+              <div className="mb-3">
+                <Waveform peaks={peaks} progress={duration > 0 ? Math.min(1, currentTime / duration) : 0} loading={peaksLoading} duration={duration} onSeek={seekRatio} />
+                <p className="mt-1 text-center text-xs text-muted-foreground">برای پرش، روی نمودار موج کلیک کنید یا آن را بکشید.</p>
+              </div>
               <div dir="ltr" className="mb-1 flex min-w-0 items-center gap-2 text-xs font-mono text-muted-foreground sm:gap-3">
+
                 <span className="w-9 shrink-0 tabular-nums sm:w-10">{formatTime(currentTime)}</span>
                 <input type="range" min={0} max={duration || 0} step={0.1} value={Math.min(currentTime, duration || 0)} onChange={(e) => seekTo(Number(e.target.value))} className="h-2 min-w-0 flex-1 cursor-pointer accent-primary" aria-label="موقعیت پخش" />
                 <span className="w-9 shrink-0 text-end tabular-nums sm:w-10">{formatTime(duration)}</span>
