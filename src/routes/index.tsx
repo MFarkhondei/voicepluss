@@ -314,6 +314,54 @@ function Index() {
     el.currentTime = next;
     setCurrentTime(next);
   }, []);
+  const seekRatio = useCallback((ratio: number) => {
+    const el = playerRef.current;
+    if (!el) return;
+    const total = el.duration || duration || 0;
+    stopAtRef.current = null;
+    const next = Math.max(0, Math.min(total, ratio * total));
+    el.currentTime = next;
+    setCurrentTime(next);
+  }, [duration]);
+
+  /** نقطه‌گذاری خودکار + تفکیک گویندگان */
+  const refineTranscript = useCallback(async () => {
+    if (segments.length === 0 || refining) return;
+    setRefining(true);
+    setRefineError(null);
+    setStatus("در حال نقطه‌گذاری و تفکیک گویندگان…");
+    try {
+      const res = await fetch("/api/refine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          segments: segments.map((s, i) => ({ i, text: s.text })),
+          language,
+          diarize,
+        }),
+      });
+      let data: any;
+      try { data = await res.json(); } catch { throw new Error(`پاسخ نامعتبر از سرور (کد ${res.status})`); }
+      if (!res.ok) throw new Error(data?.error || `خطا در بهبود متن (${res.status})`);
+      const map = new Map<number, { text: string; speaker?: string | null }>(
+        (data.segments ?? []).map((s: any) => [Number(s.i), { text: String(s.text ?? ""), speaker: s.speaker ?? null }]),
+      );
+      const next = segments.map((s, i) => {
+        const r = map.get(i);
+        return r ? { ...s, text: r.text.trim() || s.text, speaker: r.speaker ?? null } : s;
+      });
+      setSegments(next);
+      setText(rebuildTextFromSegments(next));
+      setStatus("متن نقطه‌گذاری شد.");
+    } catch (e) {
+      setRefineError(e instanceof Error ? e.message : "خطای ناشناخته در بهبود متن");
+      setStatus("بهبود متن ناموفق بود.");
+    } finally {
+      setRefining(false);
+    }
+  }, [segments, refining, language, diarize, rebuildTextFromSegments]);
+
+
 
   const filteredSegments = useMemo(() => {
     const q = segmentQuery.trim().toLowerCase();
