@@ -27,8 +27,8 @@ export function clampPartMinutes(minutes: number): number {
 }
 
 /**
- * Decode → mix to mono → downsample to 16 kHz in one pass, then split.
- * Avoids keeping full-rate multi-channel PCM in memory (main cause of Chrome "Aw, Snap!").
+ * Decode once, then mix+downsample+encode **one part at a time**.
+ * Peak memory ≈ decoded AudioBuffer + one part PCM (not the whole file as Float32).
  */
 export async function prepareAudioForTranscription(
   source: Blob,
@@ -40,14 +40,6 @@ export async function prepareAudioForTranscription(
   const partSeconds = minutes * 60;
 
   onProgress?.("در حال خواندن فایل…");
-  // Prefer OfflineAudioContext when available (lighter than interactive AudioContext on mobile).
-  const Offline =
-    typeof OfflineAudioContext !== "undefined"
-      ? OfflineAudioContext
-      : typeof webkitOfflineAudioContext !== "undefined"
-        ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (webkitOfflineAudioContext as any)
-        : null;
 
   let arrayBuffer: ArrayBuffer;
   try {
@@ -56,18 +48,16 @@ export async function prepareAudioForTranscription(
     throw new Error("خواندن فایل در مرورگر ممکن نشد (حافظه کافی نیست). فایل کوچک‌تری امتحان کنید.");
   }
 
-  // Decode with a short-lived context, then close immediately.
+  // decodeAudioData transfers/detaches the buffer on modern engines — no extra .slice()
   const decodeCtx = new AudioContext();
   let decoded: AudioBuffer;
   try {
     onProgress?.("در حال رمزگشایی صوت…");
-    // slice(0) keeps a copy so the original buffer can be GC'd after decode on some engines
-    decoded = await decodeCtx.decodeAudioData(arrayBuffer.slice(0));
+    decoded = await decodeCtx.decodeAudioData(arrayBuffer);
   } catch {
     await decodeCtx.close().catch(() => {});
     throw new Error("رمزگشایی صوت ناموفق بود. فرمت فایل را بررسی کنید.");
   } finally {
-    // Drop reference to compressed bytes as soon as decode finishes.
     // @ts-expect-error intentional release
     arrayBuffer = null;
     await decodeCtx.close().catch(() => {});
@@ -77,66 +67,61 @@ export async function prepareAudioForTranscription(
   const channels = decoded.numberOfChannels;
   const srcLength = decoded.length;
   const totalSeconds = srcLength / srcRate;
-
-  // Build 16 kHz mono in one pass — much smaller than full-rate float buffers.
-  onProgress?.("در حال آماده‌سازی صوت با کیفیت بهینه…");
-  await yieldToUi();
-
-  const ratio = srcRate / TARGET_RATE;
-  const outLength = Math.max(1, Math.floor(srcLength / ratio));
-  let mono16k: Float32Array;
-  try {
-    mono16k = new Float32Array(outLength);
-  } catch {
-    throw new Error(
-      "حافظهٔ دستگاه برای این فایل کافی نیست. فایل کوتاه‌تر آپلود کنید یا از گوشی دیگری استفاده کنید.",
-    );
-  }
-
-  // Read channel views once (no full-channel copies).
-  const chans: Float32Array[] = [];
-  for (let c = 0; c < channels; c++) {
-    chans.push(decoded.getChannelData(c));
-  }
-
-  const invCh = 1 / channels;
-  const chunkOut = 48_000; // process in blocks to yield to UI
-  for (let o0 = 0; o0 < outLength; o0 += chunkOut) {
-    const o1 = Math.min(outLength, o0 + chunkOut);
-    for (let o = o0; o < o1; o++) {
-      const srcIndex = Math.min(srcLength - 1, Math.floor(o * ratio));
-      let sum = 0;
-      for (let c = 0; c < channels; c++) sum += chans[c][srcIndex];
-      mono16k[o] = sum * invCh;
-    }
-    if (o1 < outLength) await yieldToUi();
-  }
-
-  // Release decoded AudioBuffer / channel refs for GC before encoding parts.
-  // @ts-expect-error intentional release
-  decoded = null;
-  chans.length = 0;
-  await yieldToUi();
-
   const partCount = Math.max(1, Math.ceil(totalSeconds / partSeconds));
+
   onProgress?.(
     partCount > 1
       ? `صوت ${Math.ceil(totalSeconds / 60)} دقیقه‌ای به ${partCount} بخش ${minutes} دقیقه‌ای تقسیم می‌شود…`
       : "آماده‌سازی فایل…",
   );
 
+  // Channel views only (no full mono of entire file).
+  const chans: Float32Array[] = [];
+  for (let c = 0; c < channels; c++) chans.push(decoded.getChannelData(c));
+  const invCh = 1 / channels;
+  const ratio = srcRate / TARGET_RATE;
+
   const parts: AudioPart[] = [];
   for (let i = 0; i < partCount; i++) {
-    const startSample = Math.floor(i * partSeconds * TARGET_RATE);
-    const endSample = Math.min(mono16k.length, Math.floor((i + 1) * partSeconds * TARGET_RATE));
-    if (endSample <= startSample) continue;
-
     if (partCount > 1) onProgress?.(`آماده‌سازی بخش ${i + 1} از ${partCount}…`);
     await yieldToUi();
 
-    // subarray is a view — encodeWav must not retain it after the Blob is built.
-    const view = mono16k.subarray(startSample, endSample);
-    const blob = encodePcm16Wav(view, TARGET_RATE);
+    const startSrc = Math.min(srcLength, Math.floor(i * partSeconds * srcRate));
+    const endSrc = Math.min(srcLength, Math.floor((i + 1) * partSeconds * srcRate));
+    if (endSrc <= startSrc) continue;
+
+    const outLength = Math.max(1, Math.floor((endSrc - startSrc) / ratio));
+    let mono: Float32Array;
+    try {
+      mono = new Float32Array(outLength);
+    } catch {
+      // free as much as possible before throwing
+      chans.length = 0;
+      // @ts-expect-error intentional release
+      decoded = null;
+      throw new Error(
+        "حافظهٔ دستگاه برای این فایل کافی نیست. فایل کوتاه‌تر آپلود کنید یا از دستگاه دیگری استفاده کنید.",
+      );
+    }
+
+    // Mix + downsample only this part
+    const block = 24_000;
+    for (let o0 = 0; o0 < outLength; o0 += block) {
+      const o1 = Math.min(outLength, o0 + block);
+      for (let o = o0; o < o1; o++) {
+        const srcIndex = Math.min(srcLength - 1, startSrc + Math.floor(o * ratio));
+        let sum = 0;
+        for (let c = 0; c < channels; c++) sum += chans[c][srcIndex];
+        mono[o] = sum * invCh;
+      }
+      if (o1 < outLength) await yieldToUi();
+    }
+
+    const blob = encodePcm16Wav(mono, TARGET_RATE);
+    // drop part PCM ASAP (Blob holds its own copy)
+    // @ts-expect-error intentional release
+    mono = null;
+
     parts.push({
       blob,
       name:
@@ -149,14 +134,15 @@ export async function prepareAudioForTranscription(
     });
   }
 
+  chans.length = 0;
   // @ts-expect-error intentional release
-  mono16k = null;
+  decoded = null;
+  await yieldToUi();
 
-  void Offline; // keep reference shape for future offline render path
   return { parts, totalSeconds };
 }
 
-/** Encode already-16kHz mono Float32 samples to 16-bit PCM WAV without extra resample. */
+/** Encode already-16kHz mono Float32 samples to 16-bit PCM WAV. */
 function encodePcm16Wav(samples: Float32Array, sampleRate: number): Blob {
   const dataBytes = samples.length * 2;
   const buffer = new ArrayBuffer(44 + dataBytes);
@@ -205,6 +191,3 @@ function yieldToUi(): Promise<void> {
     }
   });
 }
-
-// Safari legacy
-declare const webkitOfflineAudioContext: typeof OfflineAudioContext | undefined;
