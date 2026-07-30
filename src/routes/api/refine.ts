@@ -30,6 +30,25 @@ function systemPrompt(language: string, diarize: boolean) {
   ].join(" ");
 }
 
+function friendlyError(status: number, detail: string): string {
+  const lower = detail.toLowerCase();
+  if (
+    status === 429 ||
+    lower.includes("rate limit") ||
+    lower.includes("tokens per minute") ||
+    lower.includes("tpm")
+  ) {
+    return "به علت محدودیت سرویس امکان اصلاح متن وجود ندارد. چند لحظه بعد دوباره تلاش کنید.";
+  }
+  if (status === 401 || status === 403) {
+    return "دسترسی به سرویس بهبود متن ممکن نیست. کلید سرویس را بررسی کنید.";
+  }
+  if (status >= 500) {
+    return "سرویس بهبود متن موقتاً در دسترس نیست. کمی بعد دوباره تلاش کنید.";
+  }
+  return "خطا در بهبود متن. لطفاً دوباره تلاش کنید.";
+}
+
 async function callGroq(apiKey: string, batch: InSeg[], language: string, diarize: boolean): Promise<OutSeg[]> {
   const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
@@ -46,7 +65,7 @@ async function callGroq(apiKey: string, batch: InSeg[], language: string, diariz
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
-    throw new Error(`status ${res.status}: ${detail.slice(0, 300)}`);
+    throw new Error(friendlyError(res.status, detail));
   }
   const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
   const raw = data.choices?.[0]?.message?.content ?? "{}";
@@ -75,7 +94,8 @@ export const Route = createFileRoute("/api/refine")({
         if (segments.length === 0) return Response.json({ error: "متنی برای بهبود ارسال نشده است." }, { status: 400 });
 
         const language = body.language === "en" ? "en" : "fa";
-        const diarize = body.diarize !== false;
+        // فقط وقتی کاربر صریحاً فعال کرده باشد
+        const diarize = body.diarize === true;
 
         try {
           const out: OutSeg[] = [];
@@ -88,7 +108,7 @@ export const Route = createFileRoute("/api/refine")({
               out.push({
                 i: s.i,
                 text: (r?.text || s.text).trim(),
-                speaker: r?.speaker ? String(r.speaker).slice(0, 40) : null,
+                speaker: diarize && r?.speaker ? String(r.speaker).slice(0, 40) : null,
               });
             }
           }
@@ -96,7 +116,16 @@ export const Route = createFileRoute("/api/refine")({
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           console.error("[refine]", message);
-          return Response.json({ error: `خطای بهبود متن: ${message.slice(0, 300)}` }, { status: 502 });
+          // اگر پیام از friendlyError آمده، همان را برگردان؛ در غیر این صورت پیام عمومی
+          const isFriendly =
+            message.includes("محدودیت سرویس") ||
+            message.includes("دسترسی به سرویس") ||
+            message.includes("موقتاً در دسترس") ||
+            message.includes("دوباره تلاش");
+          return Response.json(
+            { error: isFriendly ? message : "خطا در بهبود متن. لطفاً دوباره تلاش کنید." },
+            { status: 502 },
+          );
         }
       },
     },
