@@ -7,12 +7,26 @@ const MAX_BYTES = 24 * 1024 * 1024;
 const MAX_RETRIES = 4;
 const TIMEOUT_MS = 240_000;
 
-type Segment = { start: number; end: number; text: string };
+type Segment = {
+  start: number;
+  end: number;
+  text: string;
+  /** 0..1 derived from Whisper avg_logprob; higher = more confident */
+  confidence?: number | null;
+};
 
 function normalizeLanguage(raw: unknown): string {
   const v = String(raw ?? "fa").trim().toLowerCase();
   if (v === "en" || v === "english" || v === "انگلیسی") return "en";
   return "fa";
+}
+
+/** Convert avg_logprob (≤0) to a 0..1 confidence score. */
+function logprobToConfidence(avgLogprob: unknown): number | null {
+  if (typeof avgLogprob !== "number" || !Number.isFinite(avgLogprob)) return null;
+  // exp(avg_logprob) is a common mapping; clamp for UI.
+  const conf = Math.exp(Math.min(0, avgLogprob));
+  return Math.max(0, Math.min(1, conf));
 }
 
 async function callGroq(
@@ -57,7 +71,13 @@ async function callGroq(
       const data = (await res.json()) as {
         text?: string;
         duration?: number;
-        segments?: { start: number; end: number; text: string }[];
+        segments?: {
+          start: number;
+          end: number;
+          text: string;
+          avg_logprob?: number;
+          no_speech_prob?: number;
+        }[];
       };
 
       const textFromSegments = (data.segments ?? [])
@@ -73,6 +93,7 @@ async function callGroq(
           start: s.start,
           end: s.end,
           text: (s.text ?? "").trim(),
+          confidence: logprobToConfidence(s.avg_logprob),
         })),
       };
     } catch (err) {
