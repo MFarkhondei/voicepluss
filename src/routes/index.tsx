@@ -29,7 +29,6 @@ import { Waveform } from "@/components/Waveform";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ContrastToggle } from "@/components/ContrastToggle";
 
-
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
@@ -43,12 +42,19 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
-type Segment = { start: number; end: number; text: string; speaker?: string | null };
+type Segment = {
+  start: number;
+  end: number;
+  text: string;
+  speaker?: string | null;
+  /** 0..1 from Whisper avg_logprob; lower = less confident */
+  confidence?: number | null;
+};
 type AnalysisMode = "quick" | "full";
 type OutputLanguage = "fa" | "en";
 
-/** همیشه دقت بالا */
 const TRANSCRIBE_MODEL = "whisper-large-v3";
+const LOW_CONFIDENCE = 0.55;
 
 const LANGUAGES: { id: OutputLanguage; label: string }[] = [
   { id: "fa", label: "فارسی" },
@@ -70,6 +76,10 @@ function formatTime(sec: number) {
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+function isLowConfidence(c?: number | null) {
+  return typeof c === "number" && Number.isFinite(c) && c < LOW_CONFIDENCE;
 }
 
 async function transcribeOne(
@@ -108,7 +118,12 @@ async function transcribeOne(
       const finalText = (data.text?.trim() || textFromSegments) ?? "";
       return {
         text: finalText,
-        segments: (data.segments ?? []).map((s: Segment) => ({ start: s.start, end: s.end, text: (s.text ?? "").trim() })),
+        segments: (data.segments ?? []).map((s: Segment & { confidence?: number | null }) => ({
+          start: s.start,
+          end: s.end,
+          text: (s.text ?? "").trim(),
+          confidence: typeof s.confidence === "number" ? s.confidence : null,
+        })),
         duration: data.duration ?? null,
       };
     } catch (err) {
@@ -132,12 +147,28 @@ function SegmentRow({
 }) {
   const [draft, setDraft] = useState(seg.text);
   const [editing, setEditing] = useState(false);
+  const low = isLowConfidence(seg.confidence);
   useEffect(() => { if (!editing) setDraft(seg.text); }, [seg.text, editing]);
+  const baseClass = isActive
+    ? "border-primary bg-primary/10 ring-1 ring-primary/40"
+    : low
+      ? "border-amber-500/50 bg-amber-500/10 hover:bg-amber-500/15"
+      : "border-transparent bg-surface hover:bg-secondary/60";
   return (
-    <li ref={cardRef} aria-current={isActive ? "true" : undefined} className={`scroll-mt-4 rounded-xl border p-3 text-sm transition-colors ${isActive ? "border-primary bg-primary/10 ring-1 ring-primary/40" : "border-transparent bg-surface hover:bg-secondary/60"}`}>
-      {seg.speaker ? (
-        <p className="mb-1.5 inline-flex items-center rounded-full bg-accent/15 px-2 py-0.5 text-xs font-bold text-accent">{seg.speaker}</p>
-      ) : null}
+    <li ref={cardRef} aria-current={isActive ? "true" : undefined} className={`scroll-mt-4 rounded-xl border p-3 text-sm transition-colors ${baseClass}`}>
+      <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+        {seg.speaker ? (
+          <p className="inline-flex items-center rounded-full bg-accent/15 px-2 py-0.5 text-xs font-bold text-accent">{seg.speaker}</p>
+        ) : null}
+        {low ? (
+          <p
+            className="inline-flex items-center rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200"
+            title={typeof seg.confidence === "number" ? `اطمینان مدل: ${Math.round(seg.confidence * 100)}٪` : "اطمینان پایین"}
+          >
+            اطمینان پایین{typeof seg.confidence === "number" ? ` · ${Math.round(seg.confidence * 100)}٪` : ""}
+          </p>
+        ) : null}
+      </div>
       <div className="flex min-w-0 items-start gap-2 sm:gap-3">
         <button type="button" onClick={() => onSeek(seg.start)} aria-label={`پرش به دقیقه ${formatTime(seg.start)}`} className="shrink-0 pt-1.5 font-mono text-xs text-muted-foreground hover:text-primary focus-visible:ring-2 focus-visible:ring-ring" title="پرش به این بخش">{formatTime(seg.start)}</button>
         <textarea value={draft} aria-label={`متن بخش ${index + 1} از دقیقه ${formatTime(seg.start)}`} onFocus={() => setEditing(true)} onChange={(e) => { setDraft(e.target.value); onChange(index, e.target.value); }} onBlur={() => setEditing(false)} rows={2} className="min-w-0 flex-1 resize-y rounded-lg border border-transparent bg-transparent p-1.5 text-right text-sm leading-7 outline-none focus:border-border focus:bg-card focus:ring-2 focus:ring-ring" dir="rtl" />
@@ -148,7 +179,6 @@ function SegmentRow({
       </div>
     </li>
   );
-
 }
 
 function Index() {
@@ -217,7 +247,6 @@ function Index() {
       .finally(() => { if (peakJobRef.current === job) setPeaksLoading(false); });
   }, []);
 
-
   useEffect(() => () => { if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current); }, []);
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 1024px)");
@@ -245,6 +274,11 @@ function Index() {
     if (currentTime >= last.start) return segments.length - 1;
     return -1;
   }, [segments, currentTime]);
+
+  const lowConfidenceCount = useMemo(
+    () => segments.filter((s) => isLowConfidence(s.confidence)).length,
+    [segments],
+  );
 
   useEffect(() => {
     if (activeSegmentIndex < 0) return;
@@ -324,12 +358,11 @@ function Index() {
     setCurrentTime(next);
   }, [duration]);
 
-  /** نقطه‌گذاری خودکار + تفکیک گویندگان */
   const refineTranscript = useCallback(async () => {
     if (segments.length === 0 || refining) return;
     setRefining(true);
     setRefineError(null);
-    setStatus("در حال نقطه‌گذاری و تفکیک گویندگان…");
+    setStatus("در حال اصلاح املا، علائم و تفکیک گویندگان…");
     try {
       const res = await fetch("/api/refine", {
         method: "POST",
@@ -352,7 +385,7 @@ function Index() {
       });
       setSegments(next);
       setText(rebuildTextFromSegments(next));
-      setStatus("متن نقطه‌گذاری شد.");
+      setStatus("املا و علائم اصلاح شد.");
     } catch (e) {
       setRefineError(e instanceof Error ? e.message : "خطای ناشناخته در بهبود متن");
       setStatus("بهبود متن ناموفق بود.");
@@ -360,8 +393,6 @@ function Index() {
       setRefining(false);
     }
   }, [segments, refining, language, diarize, rebuildTextFromSegments]);
-
-
 
   const filteredSegments = useMemo(() => {
     const q = segmentQuery.trim().toLowerCase();
@@ -407,7 +438,12 @@ function Index() {
           const result = await transcribeOne(part.blob, part.name, language, ac.signal);
           if (result.text) textParts.push(result.text);
           for (const s of result.segments) {
-            allSegments.push({ start: s.start + part.offsetSeconds, end: s.end + part.offsetSeconds, text: s.text });
+            allSegments.push({
+              start: s.start + part.offsetSeconds,
+              end: s.end + part.offsetSeconds,
+              text: s.text,
+              confidence: s.confidence ?? null,
+            });
           }
           const partial = textParts.join(" ").trim() || allSegments.map((s) => s.text).join(" ").trim();
           if (partial) { setText(partial); setSegments([...allSegments]); }
@@ -547,7 +583,6 @@ function Index() {
 
   const hasTranscript = segments.length > 0;
 
-  /** میانبرهای صفحه‌کلید */
   useEffect(() => {
     const isTyping = (el: EventTarget | null) => {
       const node = el as HTMLElement | null;
@@ -576,13 +611,11 @@ function Index() {
       }
       if (e.key === "ArrowRight" && audioUrl) { e.preventDefault(); skip(-SKIP_SECONDS); return; }
       if (e.key === "ArrowLeft" && audioUrl) { e.preventDefault(); skip(SKIP_SECONDS); return; }
-      if (e.key === "?" ) { e.preventDefault(); setShowShortcuts((v) => !v); }
+      if (e.key === "?") { e.preventDefault(); setShowShortcuts((v) => !v); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [audioUrl, segments.length, togglePlay, skip, downloadSubtitle]);
-
-
 
   const controlsColumn = (
     <div className="flex min-w-0 w-full flex-col gap-6">
@@ -634,11 +667,20 @@ function Index() {
                 </select>
               </div>
               <div className="mb-3">
-                <Waveform peaks={peaks} progress={duration > 0 ? Math.min(1, currentTime / duration) : 0} loading={peaksLoading} duration={duration} onSeek={seekRatio} />
-                <p className="mt-1 text-center text-xs text-muted-foreground">برای پرش، روی نمودار موج کلیک کنید یا آن را بکشید.</p>
+                <Waveform
+                  peaks={peaks}
+                  progress={duration > 0 ? Math.min(1, currentTime / duration) : 0}
+                  loading={peaksLoading}
+                  duration={duration}
+                  onSeek={seekRatio}
+                  onSkip={skip}
+                  skipSeconds={SKIP_SECONDS}
+                />
+                <p className="mt-1 text-center text-xs text-muted-foreground">
+                  وسط موج: پرش به زمان · سمت چپ: {SKIP_SECONDS}ث عقب · سمت راست / کلیک راست: {SKIP_SECONDS}ث جلو
+                </p>
               </div>
               <div dir="ltr" className="mb-1 flex min-w-0 items-center gap-2 text-xs font-mono text-muted-foreground sm:gap-3">
-
                 <span className="w-9 shrink-0 tabular-nums sm:w-10">{formatTime(currentTime)}</span>
                 <input type="range" min={0} max={duration || 0} step={0.1} value={Math.min(currentTime, duration || 0)} onChange={(e) => seekTo(Number(e.target.value))} className="h-2 min-w-0 flex-1 cursor-pointer accent-primary" aria-label="موقعیت پخش" />
                 <span className="w-9 shrink-0 text-end tabular-nums sm:w-10">{formatTime(duration)}</span>
@@ -692,8 +734,13 @@ function Index() {
 
   const textPanel = hasTranscript ? (
     <div className="panel group flex min-w-0 flex-col overflow-hidden" style={lockedStyle}>
-      <div className="flex shrink-0 items-center justify-between gap-3 px-3 py-4 sm:px-6">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-3 py-4 sm:px-6">
         <span className="min-w-0 text-sm font-bold">خروجی متن ({segments.length} بخش){loading ? <span className="mr-2 text-xs font-normal text-muted-foreground"> (در حال تکمیل…)</span> : null}</span>
+        {lowConfidenceCount > 0 ? (
+          <span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-medium text-amber-800 dark:text-amber-200">
+            {lowConfidenceCount} بخش با اطمینان پایین
+          </span>
+        ) : null}
       </div>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-t border-border px-3 pb-5 pt-4 sm:px-6">
         <div className="mb-3 flex shrink-0 items-center gap-2">
@@ -718,13 +765,22 @@ function Index() {
             <input type="checkbox" checked={diarize} onChange={(e) => setDiarize(e.target.checked)} className="size-4 accent-primary" />
             تفکیک گویندگان
           </label>
-          {!loading && <button onClick={() => void refineTranscript()} disabled={refining || segments.length === 0} aria-label="نقطه‌گذاری خودکار و تفکیک گویندگان" className="inline-flex items-center gap-2 rounded-xl border border-accent/40 bg-accent/10 px-3.5 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/15 disabled:opacity-50">{refining ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Wand2 className="size-4" aria-hidden="true" />}{refining ? "در حال بهبود…" : "نقطه‌گذاری خودکار"}</button>}
+          {!loading && (
+            <button
+              onClick={() => void refineTranscript()}
+              disabled={refining || segments.length === 0}
+              aria-label="اصلاح املا و علائم نگارشی"
+              className="inline-flex items-center gap-2 rounded-xl border border-accent/40 bg-accent/10 px-3.5 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/15 disabled:opacity-50"
+            >
+              {refining ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Wand2 className="size-4" aria-hidden="true" />}
+              {refining ? "در حال اصلاح…" : "اصلاح املا و علائم"}
+            </button>
+          )}
           {!loading && <button onClick={() => downloadSubtitle("srt")} aria-label="دانلود فایل زیرنویس SRT" className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary"><Download className="size-4" aria-hidden="true" /> SRT</button>}
           {!loading && <button onClick={() => downloadSubtitle("txt")} aria-label="دانلود فایل متنی TXT" className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary"><Download className="size-4" aria-hidden="true" /> TXT</button>}
           {!loading && <button onClick={() => void runAnalysis("quick")} disabled={analyzing || segments.length === 0} className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary disabled:opacity-50">{analyzing ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Sparkles className="size-4" aria-hidden="true" />}{analyzing ? "در حال تحلیل…" : "تحلیل متن"}</button>}
           <button onClick={copy} disabled={segments.length === 0} aria-label="کپی متن" className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">{copied ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}{copied ? "کپی شد" : "کپی"}</button>
         </div>
-
       </div>
     </div>
   ) : null;
@@ -782,7 +838,6 @@ function Index() {
           <div dir="rtl" className="order-1 min-w-0 w-full lg:order-2">{controlsColumn}</div>
         </div>
       ) : (
-
         <div className="mx-auto w-full min-w-0 max-w-3xl">{controlsColumn}</div>
       )}
       <footer className="mt-auto pt-4 text-center text-xs text-muted-foreground">VoicePluss — فایل‌ها فقط برای پردازش ارسال می‌شوند. از ویدیو فقط صوت استخراج می‌شود.</footer>
