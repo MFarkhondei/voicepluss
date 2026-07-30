@@ -80,6 +80,26 @@ function isLowConfidence(c?: number | null) {
   return typeof c === "number" && Number.isFinite(c) && c < LOW_CONFIDENCE;
 }
 
+/** پیام خطای بهبود متن را برای کاربر فارسی و خوانا می‌کند */
+function friendlyRefineError(raw: string): string {
+  const t = raw.toLowerCase();
+  if (
+    t.includes("rate limit") ||
+    t.includes("tokens per minute") ||
+    t.includes("tpm") ||
+    t.includes("429") ||
+    t.includes("محدودیت سرویس")
+  ) {
+    return "به علت محدودیت سرویس امکان اصلاح متن وجود ندارد. چند لحظه بعد دوباره تلاش کنید.";
+  }
+  if (t.includes("401") || t.includes("403") || t.includes("api key")) {
+    return "دسترسی به سرویس بهبود متن ممکن نیست. کلید سرویس را بررسی کنید.";
+  }
+  // اگر سرور از قبل پیام فارسی فرستاده، همان را نگه دار
+  if (/[\u0600-\u06FF]/.test(raw) && raw.length < 200) return raw.replace(/^خطای بهبود متن:\s*/i, "");
+  return "خطا در بهبود متن. لطفاً دوباره تلاش کنید.";
+}
+
 async function transcribeOne(
   blob: Blob,
   name: string,
@@ -197,6 +217,7 @@ function Index() {
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [analysisCopied, setAnalysisCopied] = useState(false);
   const [segmentQuery, setSegmentQuery] = useState("");
+  const [onlyLowConfidence, setOnlyLowConfidence] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [textLockH, setTextLockH] = useState<number | null>(null);
   const [isDesktop, setIsDesktop] = useState(false);
@@ -209,7 +230,7 @@ function Index() {
   const [peaksLoading, setPeaksLoading] = useState(false);
   const [refining, setRefining] = useState(false);
   const [refineError, setRefineError] = useState<string | null>(null);
-  const [diarize, setDiarize] = useState(true);
+  const [diarize, setDiarize] = useState(false);
   const [status, setStatus] = useState("");
   const [showShortcuts, setShowShortcuts] = useState(false);
 
@@ -372,7 +393,7 @@ function Index() {
     if (segments.length === 0 || refining) return;
     setRefining(true);
     setRefineError(null);
-    setStatus("در حال اصلاح املا، علائم و تفکیک گویندگان…");
+    setStatus(diarize ? "در حال اصلاح املا، علائم و تفکیک گویندگان…" : "در حال اصلاح املا و علائم…");
     try {
       const res = await fetch("/api/refine", {
         method: "POST",
@@ -397,7 +418,8 @@ function Index() {
       setText(rebuildTextFromSegments(next));
       setStatus("املا و علائم اصلاح شد.");
     } catch (e) {
-      setRefineError(e instanceof Error ? e.message : "خطای ناشناخته در بهبود متن");
+      const raw = e instanceof Error ? e.message : "خطای ناشناخته در بهبود متن";
+      setRefineError(friendlyRefineError(raw));
       setStatus("بهبود متن ناموفق بود.");
     } finally {
       setRefining(false);
@@ -405,10 +427,12 @@ function Index() {
   }, [segments, refining, language, diarize, rebuildTextFromSegments]);
 
   const filteredSegments = useMemo(() => {
+    let list = segments.map((s, i) => ({ s, i }));
+    if (onlyLowConfidence) list = list.filter(({ s }) => isLowConfidence(s.confidence));
     const q = segmentQuery.trim().toLowerCase();
-    if (!q) return segments.map((s, i) => ({ s, i }));
-    return segments.map((s, i) => ({ s, i })).filter(({ s }) => s.text.toLowerCase().includes(q));
-  }, [segments, segmentQuery]);
+    if (q) list = list.filter(({ s }) => s.text.toLowerCase().includes(q));
+    return list;
+  }, [segments, segmentQuery, onlyLowConfidence]);
 
   const send = useCallback(async (blob: Blob, name: string) => {
     cancelJob();
@@ -420,6 +444,7 @@ function Index() {
     setText("");
     setSegments([]);
     setSegmentQuery("");
+    setOnlyLowConfidence(false);
     setFileName(name);
     setProgressLabel(null);
     setProgressPct(0);
@@ -547,6 +572,7 @@ function Index() {
     setText("");
     setSegments([]);
     setSegmentQuery("");
+    setOnlyLowConfidence(false);
     textLockHRef.current = null;
     setTextLockH(null);
     clearAnalysis();
@@ -571,6 +597,7 @@ function Index() {
       setText(parsed.map((s) => s.text.trim()).filter(Boolean).join(" ").trim());
       setError(null);
       setPendingFile(null);
+      setOnlyLowConfidence(false);
     } catch { setError("خواندن فایل زیرنویس ممکن نشد."); }
   };
 
@@ -624,7 +651,6 @@ function Index() {
         togglePlay();
         return;
       }
-      // → جلو ، ← عقب
       if (e.key === "ArrowRight" && audioUrl) { e.preventDefault(); skip(SKIP_SECONDS); return; }
       if (e.key === "ArrowLeft" && audioUrl) { e.preventDefault(); skip(-SKIP_SECONDS); return; }
       if (e.key === "?") { e.preventDefault(); setShowShortcuts((v) => !v); }
@@ -674,7 +700,7 @@ function Index() {
                 const el = e.currentTarget;
                 const stopAt = stopAtRef.current;
                 if (stopAt != null && el.currentTime >= stopAt) { stopAtRef.current = null; el.pause(); el.currentTime = stopAt; setCurrentTime(stopAt); return; }
-                setCurrentTime(el.currentTime || 0);
+                setCurrentTime(el.currentTarget.currentTime || 0);
               }} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} className="hidden" />
               <div className="mb-3 flex items-center justify-end gap-2 text-sm">
                 <Gauge className="size-3.5 text-muted-foreground" />
@@ -753,9 +779,19 @@ function Index() {
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-3 py-4 sm:px-6">
         <span className="min-w-0 text-sm font-bold">خروجی متن ({segments.length} بخش){loading ? <span className="mr-2 text-xs font-normal text-muted-foreground"> (در حال تکمیل…)</span> : null}</span>
         {lowConfidenceCount > 0 ? (
-          <span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-medium text-amber-800 dark:text-amber-200">
-            {lowConfidenceCount} بخش با اطمینان پایین
-          </span>
+          <button
+            type="button"
+            onClick={() => setOnlyLowConfidence((v) => !v)}
+            aria-pressed={onlyLowConfidence}
+            title={onlyLowConfidence ? "نمایش همه بخش‌ها" : "فقط بخش‌های با اطمینان پایین"}
+            className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+              onlyLowConfidence
+                ? "bg-amber-500 text-white ring-2 ring-amber-500/40"
+                : "bg-amber-500/15 text-amber-800 hover:bg-amber-500/25 dark:text-amber-200"
+            }`}
+          >
+            {onlyLowConfidence ? "نمایش همه" : `${lowConfidenceCount} بخش با اطمینان پایین`}
+          </button>
         ) : null}
       </div>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-t border-border px-3 pb-5 pt-4 sm:px-6">
@@ -766,7 +802,9 @@ function Index() {
           </div>
         </div>
         {filteredSegments.length === 0 ? (
-          <p className="py-4 text-center text-sm text-muted-foreground">موردی یافت نشد.</p>
+          <p className="py-4 text-center text-sm text-muted-foreground">
+            {onlyLowConfidence && !segmentQuery.trim() ? "بخشی با اطمینان پایین یافت نشد." : "موردی یافت نشد."}
+          </p>
         ) : (
           <ul ref={listRef} className={`min-h-0 min-w-0 space-y-2 overflow-y-auto overflow-x-hidden ${isDesktop && textLockH ? "flex-1" : "max-h-[22rem]"}`}>
             {filteredSegments.map(({ s, i }) => (
@@ -774,7 +812,12 @@ function Index() {
             ))}
           </ul>
         )}
-        {segmentQuery.trim() && <p className="mt-2 shrink-0 text-xs text-muted-foreground">{filteredSegments.length} از {segments.length} مورد</p>}
+        {(segmentQuery.trim() || onlyLowConfidence) && (
+          <p className="mt-2 shrink-0 text-xs text-muted-foreground">
+            {filteredSegments.length} از {segments.length} مورد
+            {onlyLowConfidence ? " (فقط اطمینان پایین)" : ""}
+          </p>
+        )}
         {refineError && <p role="alert" className="mt-3 shrink-0 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{refineError}</p>}
         <div className="mt-4 flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
           <label className="ml-auto inline-flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
