@@ -364,6 +364,14 @@ function Index() {
     if (el.paused) { stopAtRef.current = null; void el.play().catch(() => setPlaying(false)); }
     else el.pause();
   }, [audioUrl]);
+  const pauseForEdit = useCallback(() => {
+    const el = playerRef.current;
+    if (!el || !audioUrl) return;
+    if (!el.paused) {
+      stopAtRef.current = null;
+      el.pause();
+    }
+  }, [audioUrl]);
   const skip = useCallback((delta: number) => {
     const el = playerRef.current;
     if (!el) return;
