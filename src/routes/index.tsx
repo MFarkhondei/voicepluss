@@ -829,7 +829,7 @@ function Index() {
         ) : (
           <ul ref={listRef} className={`min-h-0 min-w-0 space-y-2 overflow-y-auto overflow-x-hidden ${isDesktop && textLockH ? "flex-1" : "max-h-[22rem]"}`}>
             {filteredSegments.map(({ s, i }) => (
-              <SegmentRow key={i} seg={s} index={i} isActive={i === activeSegmentIndex} hasAudio={!!audioUrl} cardRef={i === activeSegmentIndex ? (el) => { activeCardRef.current = el; } : undefined} onSeek={seekTo} onPlayOnly={playSegmentOnly} onPlayContinue={playSegmentContinue} onChange={updateSegmentText} />
+              <SegmentRow key={i} seg={s} index={i} isActive={i === activeSegmentIndex} hasAudio={!!audioUrl} cardRef={i === activeSegmentIndex ? (el) => { activeCardRef.current = el; } : undefined} onSeek={seekTo} onPlayOnly={playSegmentOnly} onPlayContinue={playSegmentContinue} onChange={updateSegmentText} onEditStart={pauseForEdit} />
             ))}
           </ul>
         )}
