@@ -154,12 +154,13 @@ async function transcribeOne(
 }
 
 function SegmentRow({
-  seg, index, isActive, hasAudio, cardRef, onSeek, onPlayOnly, onPlayContinue, onChange,
+  seg, index, isActive, hasAudio, cardRef, onSeek, onPlayOnly, onPlayContinue, onChange, onEditStart,
 }: {
   seg: Segment; index: number; isActive: boolean; hasAudio: boolean;
   cardRef?: (el: HTMLLIElement | null) => void;
   onSeek: (t: number) => void; onPlayOnly: (s: Segment) => void; onPlayContinue: (s: Segment) => void;
   onChange: (index: number, value: string) => void;
+  onEditStart?: () => void;
 }) {
   const [draft, setDraft] = useState(seg.text);
   const [editing, setEditing] = useState(false);
@@ -187,7 +188,7 @@ function SegmentRow({
       </div>
       <div className="flex min-w-0 items-start gap-2 sm:gap-3">
         <button type="button" onClick={() => onSeek(seg.start)} aria-label={`پرش به دقیقه ${formatTime(seg.start)}`} className="shrink-0 pt-1.5 font-mono text-xs text-muted-foreground hover:text-primary focus-visible:ring-2 focus-visible:ring-ring" title="پرش به این بخش">{formatTime(seg.start)}</button>
-        <textarea value={draft} aria-label={`متن بخش ${index + 1} از دقیقه ${formatTime(seg.start)}`} onFocus={() => setEditing(true)} onChange={(e) => { setDraft(e.target.value); onChange(index, e.target.value); }} onBlur={() => setEditing(false)} rows={2} className="min-w-0 flex-1 resize-y rounded-lg border border-transparent bg-transparent p-1.5 text-right text-sm leading-7 outline-none focus:border-border focus:bg-card focus:ring-2 focus:ring-ring" dir="rtl" />
+        <textarea value={draft} aria-label={`متن بخش ${index + 1} از دقیقه ${formatTime(seg.start)}`} onFocus={() => { onEditStart?.(); setEditing(true); }} onChange={(e) => { setDraft(e.target.value); onChange(index, e.target.value); }} onBlur={() => setEditing(false)} rows={2} className="min-w-0 flex-1 resize-y rounded-lg border border-transparent bg-transparent p-1.5 text-right text-sm leading-7 outline-none focus:border-border focus:bg-card focus:ring-2 focus:ring-ring" dir="rtl" />
         <div className="flex shrink-0 flex-col gap-1.5">
           <button type="button" onClick={() => onPlayOnly(seg)} disabled={!hasAudio} aria-label="فقط همین متن پخش شود" className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40" title="فقط همین متن پخش شود"><Play className="size-4" aria-hidden="true" /></button>
           <button type="button" onClick={() => onPlayContinue(seg)} disabled={!hasAudio} aria-label="از این متن به بعد پخش شود" className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40" title="از این متن به بعد پخش شود"><SkipForward className="size-4" aria-hidden="true" /></button>
@@ -362,6 +363,14 @@ function Index() {
     if (!el || !audioUrl) return;
     if (el.paused) { stopAtRef.current = null; void el.play().catch(() => setPlaying(false)); }
     else el.pause();
+  }, [audioUrl]);
+  const pauseForEdit = useCallback(() => {
+    const el = playerRef.current;
+    if (!el || !audioUrl) return;
+    if (!el.paused) {
+      stopAtRef.current = null;
+      el.pause();
+    }
   }, [audioUrl]);
   const skip = useCallback((delta: number) => {
     const el = playerRef.current;
@@ -820,7 +829,7 @@ function Index() {
         ) : (
           <ul ref={listRef} className={`min-h-0 min-w-0 space-y-2 overflow-y-auto overflow-x-hidden ${isDesktop && textLockH ? "flex-1" : "max-h-[22rem]"}`}>
             {filteredSegments.map(({ s, i }) => (
-              <SegmentRow key={i} seg={s} index={i} isActive={i === activeSegmentIndex} hasAudio={!!audioUrl} cardRef={i === activeSegmentIndex ? (el) => { activeCardRef.current = el; } : undefined} onSeek={seekTo} onPlayOnly={playSegmentOnly} onPlayContinue={playSegmentContinue} onChange={updateSegmentText} />
+              <SegmentRow key={i} seg={s} index={i} isActive={i === activeSegmentIndex} hasAudio={!!audioUrl} cardRef={i === activeSegmentIndex ? (el) => { activeCardRef.current = el; } : undefined} onSeek={seekTo} onPlayOnly={playSegmentOnly} onPlayContinue={playSegmentContinue} onChange={updateSegmentText} onEditStart={pauseForEdit} />
             ))}
           </ul>
         )}
