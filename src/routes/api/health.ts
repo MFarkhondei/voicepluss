@@ -5,7 +5,7 @@ import { createFileRoute } from "@tanstack/react-router";
 const MODEL = "whisper-large-v3-turbo";
 
 /** ساخت یک WAV کوتاه (۰٫۵ ثانیه، ۱۶ کیلوهرتز مونو) با نویز بسیار ضعیف */
-function makeSampleWav(): Uint8Array {
+function makeSampleWav(): ArrayBuffer {
   const sampleRate = 16000;
   const samples = Math.floor(sampleRate * 0.5);
   const buffer = new ArrayBuffer(44 + samples * 2);
@@ -31,7 +31,7 @@ function makeSampleWav(): Uint8Array {
     const v = Math.sin(2 * Math.PI * 220 * t) * 0.05;
     view.setInt16(44 + i * 2, Math.max(-1, Math.min(1, v)) * 32767, true);
   }
-  return new Uint8Array(buffer);
+  return buffer;
 }
 
 export const Route = createFileRoute("/api/health")({

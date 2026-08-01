@@ -13,6 +13,7 @@ import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiTranscribeRouteImport } from './routes/api/transcribe'
 import { Route as ApiRefineRouteImport } from './routes/api/refine'
+import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiAnalyzeRouteImport } from './routes/api/analyze'
 
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
@@ -35,6 +36,11 @@ const ApiRefineRoute = ApiRefineRouteImport.update({
   path: '/api/refine',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiHealthRoute = ApiHealthRouteImport.update({
+  id: '/api/health',
+  path: '/api/health',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAnalyzeRoute = ApiAnalyzeRouteImport.update({
   id: '/api/analyze',
   path: '/api/analyze',
@@ -45,6 +51,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/api/analyze': typeof ApiAnalyzeRoute
+  '/api/health': typeof ApiHealthRoute
   '/api/refine': typeof ApiRefineRoute
   '/api/transcribe': typeof ApiTranscribeRoute
 }
@@ -52,6 +59,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/api/analyze': typeof ApiAnalyzeRoute
+  '/api/health': typeof ApiHealthRoute
   '/api/refine': typeof ApiRefineRoute
   '/api/transcribe': typeof ApiTranscribeRoute
 }
@@ -60,6 +68,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/api/analyze': typeof ApiAnalyzeRoute
+  '/api/health': typeof ApiHealthRoute
   '/api/refine': typeof ApiRefineRoute
   '/api/transcribe': typeof ApiTranscribeRoute
 }
@@ -69,15 +78,23 @@ export interface FileRouteTypes {
     | '/'
     | '/sitemap.xml'
     | '/api/analyze'
+    | '/api/health'
     | '/api/refine'
     | '/api/transcribe'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/sitemap.xml' | '/api/analyze' | '/api/refine' | '/api/transcribe'
+  to:
+    | '/'
+    | '/sitemap.xml'
+    | '/api/analyze'
+    | '/api/health'
+    | '/api/refine'
+    | '/api/transcribe'
   id:
     | '__root__'
     | '/'
     | '/sitemap.xml'
     | '/api/analyze'
+    | '/api/health'
     | '/api/refine'
     | '/api/transcribe'
   fileRoutesById: FileRoutesById
@@ -86,6 +103,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   ApiAnalyzeRoute: typeof ApiAnalyzeRoute
+  ApiHealthRoute: typeof ApiHealthRoute
   ApiRefineRoute: typeof ApiRefineRoute
   ApiTranscribeRoute: typeof ApiTranscribeRoute
 }
@@ -120,6 +138,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiRefineRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/health': {
+      id: '/api/health'
+      path: '/api/health'
+      fullPath: '/api/health'
+      preLoaderRoute: typeof ApiHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/analyze': {
       id: '/api/analyze'
       path: '/api/analyze'
@@ -134,6 +159,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   ApiAnalyzeRoute: ApiAnalyzeRoute,
+  ApiHealthRoute: ApiHealthRoute,
   ApiRefineRoute: ApiRefineRoute,
   ApiTranscribeRoute: ApiTranscribeRoute,
 }
