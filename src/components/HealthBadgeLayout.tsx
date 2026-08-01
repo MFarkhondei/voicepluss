@@ -1,16 +1,22 @@
 import { useEffect } from "react";
 
 /**
- * Groq status as a green/red dot under the panel collapse chevron.
- * Safe: no MutationObserver loops (was freezing the app).
+ * Groq status dot under the panel collapse chevron.
+ * - Green / red / gray by connection state
+ * - Hover shows real status message (with latency when available)
+ * - Click keeps native handler → re-runs health check
  */
 export function HealthBadgeLayout() {
   useEffect(() => {
     let cancelled = false;
-    let lastState = "";
-    let tries = 0;
+    let lastKey = "";
 
     const findHealth = (): HTMLButtonElement | null => {
+      const marked = document.querySelector(
+        "button[data-vp-dot='1']",
+      ) as HTMLButtonElement | null;
+      if (marked) return marked;
+
       const byTitle = document.querySelector(
         'button[title*="تست سرویس Groq"], button[title*="سرویس Groq"]',
       ) as HTMLButtonElement | null;
@@ -18,70 +24,107 @@ export function HealthBadgeLayout() {
 
       return (
         (Array.from(document.querySelectorAll("button")).find((b) => {
-          if (b.dataset.vpDot === "1") return true;
-          const t = b.textContent || "";
+          const t = (b.textContent || "").trim();
           return (
             t.includes("سرویس") &&
             (t.includes("فعال") ||
               t.includes("بررسی") ||
               t.includes("دسترس") ||
-              t.includes("اتصال"))
+              t.includes("اتصال") ||
+              t.includes("میلی"))
           );
         }) as HTMLButtonElement | undefined) || null
       );
     };
 
+    const readMessage = (health: HTMLButtonElement): string => {
+      // Prefer live visible text before we strip it
+      const live = (health.textContent || "").replace(/\s+/g, " ").trim();
+      if (
+        live &&
+        !live.startsWith("در حال بررسی") &&
+        live.length > 2 &&
+        (live.includes("فعال") ||
+          live.includes("نیست") ||
+          live.includes("اتصال") ||
+          live.includes("میلی") ||
+          live.includes("خطا"))
+      ) {
+        health.dataset.vpMsg = live;
+        return live;
+      }
+
+      // Kept from a previous successful read
+      if (health.dataset.vpMsg) return health.dataset.vpMsg;
+
+      // Class-based fallback
+      if (health.className.includes("text-primary")) {
+        return "سرویس Groq فعال است";
+      }
+      if (health.className.includes("text-destructive")) {
+        return "سرویس در دسترس نیست";
+      }
+      return "در حال بررسی سرویس…";
+    };
+
     const apply = () => {
       if (cancelled) return;
       const health = findHealth();
-      if (!health) {
-        if (tries++ < 20) window.setTimeout(apply, 300);
-        return;
-      }
+      if (!health) return;
 
       health.dataset.vpDot = "1";
 
-      const text = (health.textContent || "").replace(/\s+/g, " ").trim();
-      const titleAttr = health.getAttribute("title") || "";
+      // Capture message BEFORE stripping label
+      const msg = readMessage(health);
+
       const isOk =
-        health.className.includes("text-primary") ||
-        text.includes("فعال") ||
-        titleAttr.includes("فعال");
+        health.className.includes("text-primary") || msg.includes("فعال");
       const isError =
         health.className.includes("text-destructive") ||
-        text.includes("نیست") ||
-        text.includes("برقرار نشد") ||
-        text.includes("خطا") ||
-        titleAttr.includes("نیست") ||
-        titleAttr.includes("برقرار نشد");
+        msg.includes("نیست") ||
+        msg.includes("برقرار نشد") ||
+        msg.includes("خطا") ||
+        msg.includes("اتصال به سرور");
+      const isChecking =
+        !isOk &&
+        !isError &&
+        (health.disabled ||
+          msg.includes("بررسی") ||
+          health.className.includes("text-muted"));
 
-      const tip =
-        titleAttr && titleAttr !== "تست سرویس Groq"
-          ? titleAttr
-          : text || (isOk ? "سرویس Groq فعال است" : "سرویس در دسترس نیست");
+      const tip = isChecking ? "در حال بررسی سرویس…" : msg;
+      const color = isOk ? "ok" : isError ? "err" : "wait";
+      const key = `${color}|${tip}`;
 
-      const stateKey = `${isOk ? "ok" : isError ? "err" : "wait"}|${tip}`;
-      // Only restyle when state changes — prevents freeze from constant DOM writes
-      if (stateKey === lastState && health.dataset.vpStyled === "1") return;
-      lastState = stateKey;
-
-      health.setAttribute("title", tip);
-      health.setAttribute("aria-label", tip);
-
-      // Anchor under the collapse chevron (left side of summary in RTL)
+      // Position under chevron every time (layout may shift)
       const details = health.closest("details") as HTMLElement | null;
       const summary = details?.querySelector("summary") as HTMLElement | null;
-      const host = (details || health.parentElement) as HTMLElement | null;
-      if (host && getComputedStyle(host).position === "static") {
-        host.style.position = "relative";
+      if (details && getComputedStyle(details).position === "static") {
+        details.style.position = "relative";
       }
 
-      // Summary height ≈ chevron row; sit just below it, slightly inset from left
-      const summaryH = summary ? Math.round(summary.getBoundingClientRect().height) : 48;
+      let left = 16;
+      let top = 52;
+      if (summary) {
+        const chevron =
+          (summary.querySelector("svg") as SVGElement | null) ||
+          (summary.lastElementChild as HTMLElement | null);
+        const dRect = details!.getBoundingClientRect();
+        const sRect = summary.getBoundingClientRect();
+        top = Math.round(sRect.bottom - dRect.top + 8);
+        if (chevron) {
+          const cRect = chevron.getBoundingClientRect();
+          // Center the 20px hit-area under the chevron
+          left = Math.round(cRect.left - dRect.left + cRect.width / 2 - 10);
+        } else {
+          left = 14;
+        }
+      }
+
       health.style.position = "absolute";
-      health.style.left = "1.1rem"; // کمی به راست نسبت به لبه
-      health.style.top = `${summaryH + 6}px`;
-      health.style.zIndex = "20";
+      health.style.left = `${Math.max(8, left)}px`;
+      health.style.top = `${top}px`;
+      health.style.zIndex = "30";
       health.style.width = "1.25rem";
       health.style.height = "1.25rem";
       health.style.padding = "0";
@@ -94,13 +137,24 @@ export function HealthBadgeLayout() {
       health.style.justifyContent = "center";
       health.style.cursor = "pointer";
       health.style.maxWidth = "none";
-      health.style.boxShadow = "none";
+      health.style.pointerEvents = "auto";
 
-      let dot = health.querySelector("[data-vp-dot-inner]") as HTMLElement | null;
+      // Tooltip + a11y — always the real message
+      health.setAttribute("title", tip);
+      health.setAttribute("aria-label", tip);
+
+      if (key === lastKey && health.dataset.vpStyled === "1") {
+        // Still refresh tip in case React reset title
+        return;
+      }
+      lastKey = key;
+
+      let dot = health.querySelector(
+        "[data-vp-dot-inner]",
+      ) as HTMLElement | null;
       if (!dot) {
-        // Clear text label once
         health.querySelectorAll("span").forEach((s) => s.remove());
-        health.childNodes.forEach((n) => {
+        Array.from(health.childNodes).forEach((n) => {
           if (n.nodeType === Node.TEXT_NODE) n.textContent = "";
         });
         dot = document.createElement("span");
@@ -126,25 +180,20 @@ export function HealthBadgeLayout() {
       }
 
       health.dataset.vpStyled = "1";
+      // Ensure click still reaches React's onClick (re-check)
+      health.style.pointerEvents = "auto";
     };
 
-    // Initial attempts only — no aggressive MutationObserver on whole body
     apply();
-    const t1 = window.setTimeout(apply, 400);
-    const t2 = window.setTimeout(apply, 1200);
-    const t3 = window.setTimeout(apply, 2500);
-
-    // Light poll for health state changes (ok → error) without DOM thrashing
-    const poll = window.setInterval(() => {
-      if (cancelled) return;
-      apply();
-    }, 3000);
+    const timers = [200, 600, 1500, 3000].map((ms) =>
+      window.setTimeout(apply, ms),
+    );
+    // Poll lightly for status changes after health check completes
+    const poll = window.setInterval(apply, 2000);
 
     return () => {
       cancelled = true;
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-      window.clearTimeout(t3);
+      timers.forEach((id) => window.clearTimeout(id));
       window.clearInterval(poll);
     };
   }, []);
