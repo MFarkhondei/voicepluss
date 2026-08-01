@@ -63,7 +63,7 @@ const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 const SKIP_SECONDS = 10;
 const CANCEL_MSG = "عملیات لغو شد.";
 const CLIENT_TIMEOUT_MS = 240_000;
-const CLIENT_RETRIES = 4;
+const CLIENT_RETRIES = 3;
 
 function formatTime(sec: number) {
   if (!Number.isFinite(sec) || sec < 0) sec = 0;
@@ -123,12 +123,12 @@ async function transcribeOne(
       try { data = await res.json(); } catch { throw new Error(`پاسخ نامعتبر از سرور (کد ${res.status})`); }
       if (!res.ok) {
         const msg = data?.error || `خطا در پردازش فایل صوتی (${res.status})`;
-        if (res.status >= 500 || res.status === 429 || res.status === 408) {
-          lastError = new Error(msg);
+        lastError = new Error(msg);
+        if (attempt < CLIENT_RETRIES - 1) {
           await sleep(1200 * Math.pow(2, attempt));
           continue;
         }
-        throw new Error(msg);
+        throw lastError;
       }
       const textFromSegments = (data.segments ?? []).map((s: { text?: string }) => (s.text ?? "").trim()).join(" ").trim();
       const finalText = (data.text?.trim() || textFromSegments) ?? "";
@@ -494,8 +494,14 @@ function Index() {
           if (partial) { setText(partial); setSegments([...allSegments]); }
         } catch (partErr) {
           if (ac.signal.aborted) throw new Error(CANCEL_MSG);
-          failed.push(`بخش ${i + 1}: ${partErr instanceof Error ? partErr.message : String(partErr)}`);
-          await sleep(500);
+          const detail = partErr instanceof Error ? partErr.message : String(partErr);
+          failed.push(`بخش ${i + 1}: ${detail}`);
+          // پس از ۳ تلاش ناموفق روی این بخش، پردازش متوقف می‌شود
+          const partialText = textParts.join(" ").trim() || allSegments.map((s) => s.text).join(" ").trim();
+          if (partialText) { setText(partialText); setSegments([...allSegments]); }
+          throw new Error(
+            `تبدیل بخش ${i + 1} از ${parts.length} پس از ۳ تلاش ناموفق بود و پردازش متوقف شد.\n${detail}`,
+          );
         }
         setProgressPct(Math.round(((i + 1) / parts.length) * 100));
       }
@@ -505,7 +511,6 @@ function Index() {
       }
       setText(finalText);
       setSegments(allSegments);
-      if (failed.length > 0) setError(`برخی بخش‌ها تبدیل نشدند (متن ناقص است):\n${failed.join("\n")}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "خطای ناشناخته");
     } finally {
