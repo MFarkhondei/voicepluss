@@ -1,4 +1,1 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-// RESTORE_PENDING - truncated intentionally check next call
-export const Route = createFileRoute("/")({ component: () => null });
+RESTORE_FROM_LOCAL_FILE_TOO_LARGE_USE_ALTERNATE
