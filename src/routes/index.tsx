@@ -203,6 +203,10 @@ function Index() {
   const [elapsed, setElapsed] = useState(0);
   const [loading, setLoading] = useState(false);
   const [progressLabel, setProgressLabel] = useState<string | null>(null);
+  const [health, setHealth] = useState<{ state: "checking" | "ok" | "error"; message: string; latency?: number }>({
+    state: "checking",
+    message: "در حال بررسی سرویس…",
+  });
   const [progressPct, setProgressPct] = useState(0);
   const [text, setText] = useState("");
   const [segments, setSegments] = useState<Segment[]>([]);
