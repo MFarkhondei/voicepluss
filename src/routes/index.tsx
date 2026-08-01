@@ -701,6 +701,32 @@ function Index() {
           </summary>
           <div className="border-t border-border px-3 pb-5 pt-4 sm:px-6">
             <div className="flex flex-col items-center gap-5">
+              <button
+                type="button"
+                onClick={() => void runHealthCheck()}
+                disabled={health.state === "checking"}
+                aria-live="polite"
+                title="تست سرویس Groq"
+                className={`inline-flex max-w-full items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                  health.state === "ok"
+                    ? "border-primary/30 bg-primary/10 text-primary"
+                    : health.state === "error"
+                      ? "border-destructive/30 bg-destructive/10 text-destructive"
+                      : "border-border bg-surface text-muted-foreground"
+                }`}
+              >
+                <span
+                  className={`size-2 shrink-0 rounded-full ${
+                    health.state === "ok" ? "bg-primary" : health.state === "error" ? "bg-destructive" : "animate-pulse bg-muted-foreground"
+                  }`}
+                />
+                <span className="truncate">
+                  {health.state === "ok"
+                    ? `سرویس Groq فعال است${health.latency ? ` (${health.latency} میلی‌ثانیه)` : ""}`
+                    : health.message}
+                </span>
+              </button>
+
               <button onClick={recording ? stopRecording : startRecording} disabled={loading} aria-label={recording ? "توقف ضبط" : "شروع ضبط"} className={`flex size-24 items-center justify-center rounded-full transition-all disabled:opacity-50 ${recording ? "recording-pulse bg-destructive text-destructive-foreground" : "bg-primary text-primary-foreground hover:scale-105"}`} style={{ boxShadow: recording ? undefined : "var(--shadow-glow)" }}>
                 {recording ? <Square className="size-8" /> : <Mic className="size-9" />}
               </button>
