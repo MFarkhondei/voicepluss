@@ -282,6 +282,24 @@ function Index() {
   }, []);
 
   useEffect(() => () => { if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current); }, []);
+
+  // تست کوتاه سرویس Groq هنگام باز شدن برنامه
+  const runHealthCheck = useCallback(async () => {
+    setHealth({ state: "checking", message: "در حال بررسی سرویس…" });
+    try {
+      const res = await fetch("/api/health");
+      const data = (await res.json()) as { ok?: boolean; message?: string; latency?: number };
+      setHealth({
+        state: data.ok ? "ok" : "error",
+        message: data.message || (data.ok ? "سرویس Groq فعال است" : "سرویس در دسترس نیست"),
+        latency: data.latency,
+      });
+    } catch {
+      setHealth({ state: "error", message: "اتصال به سرور برقرار نشد" });
+    }
+  }, []);
+  useEffect(() => { void runHealthCheck(); }, [runHealthCheck]);
+
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 1024px)");
     const apply = () => setIsDesktop(mq.matches);
