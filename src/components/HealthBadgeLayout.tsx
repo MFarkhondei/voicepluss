@@ -1,108 +1,87 @@
 import { useEffect } from "react";
 
 /**
- * Arranges the bottom row of the record panel as:
- *   [آپلود]  [زبان خروجی]  [وضعیت سرویس]
- * In RTL that means: upload on the right, language in the middle, health on the left.
+ * Force layout:
+ *   راست: آپلود صوت یا ویدیو
+ *   وسط: زبان خروجی
+ *   چپ: وضعیت سرویس
  */
 export function HealthBadgeLayout() {
   useEffect(() => {
-    let tries = 0;
-    const maxTries = 48;
-    let arranged = false;
+    const PLACE = "data-vp-bar";
 
     const arrange = () => {
       const health = document.querySelector(
-        'button[title^="تست سرویس Groq"]',
-      ) as HTMLElement | null;
-      if (!health) return false;
+        'button[title*="تست سرویس Groq"]',
+      ) as HTMLButtonElement | null;
+      if (!health) return;
 
-      const labels = Array.from(document.querySelectorAll("label"));
-      const upload = labels.find((l) =>
+      const upload = Array.from(document.querySelectorAll("label")).find((l) =>
         (l.textContent || "").includes("آپلود صوت"),
       ) as HTMLElement | undefined;
-      if (!upload) return false;
+      if (!upload) return;
 
-      const row = upload.parentElement;
-      if (!row) return false;
-
+      // Language block: nearest ancestor div that contains the language <select>
       let language: HTMLElement | null = null;
-      for (const child of Array.from(row.children)) {
-        if (child === upload) continue;
-        if ((child as HTMLElement).querySelector?.("select")) {
-          language = child as HTMLElement;
+      const selects = Array.from(document.querySelectorAll("select"));
+      for (const sel of selects) {
+        const opts = Array.from(sel.options).map((o) => o.textContent || "");
+        if (opts.some((t) => t.includes("فارسی") || t.includes("English"))) {
+          language = sel.parentElement as HTMLElement;
           break;
         }
       }
-      if (!language) {
-        const spans = Array.from(document.querySelectorAll("span"));
-        const langSpan = spans.find((s) =>
-          (s.textContent || "").includes("زبان خروجی"),
-        );
-        language = (langSpan?.closest("div") as HTMLElement) || null;
-      }
+      if (!language) return;
 
-      let bar = document.querySelector(
-        "[data-upload-lang-health]",
-      ) as HTMLElement | null;
+      // Prefer reusing the existing bottom row that already holds upload
+      let bar = upload.parentElement as HTMLElement | null;
+      if (!bar) return;
 
-      if (!bar) {
-        bar = document.createElement("div");
-        bar.setAttribute("data-upload-lang-health", "1");
+      // If bar is not marked yet, restyle it as the three-item row
+      if (!bar.hasAttribute(PLACE)) {
+        bar.setAttribute(PLACE, "1");
         bar.className =
           "flex w-full min-w-0 flex-wrap items-center justify-between gap-3 border-t border-border pt-5";
-        if (row.parentElement) {
-          row.parentElement.insertBefore(bar, row);
-        } else {
-          upload.parentElement?.appendChild(bar);
-        }
       }
 
-      // DOM order in RTL + justify-between:
-      // first → راست، last → چپ
-      // آپلود (راست) · زبان (وسط) · وضعیت سرویس (چپ)
-      if (language) {
-        bar.appendChild(upload);
-        bar.appendChild(language);
-        bar.appendChild(health);
-      } else {
-        bar.appendChild(upload);
-        bar.appendChild(health);
-      }
+      // Order in DOM for RTL + justify-between:
+      // first = right, last = left
+      if (upload.parentElement !== bar) bar.appendChild(upload);
+      if (language.parentElement !== bar) bar.appendChild(language);
+      if (health.parentElement !== bar) bar.appendChild(health);
 
-      if (row !== bar && row.children.length === 0) {
-        row.style.display = "none";
+      // Explicit order every time (React may shuffle)
+      bar.insertBefore(upload, bar.firstChild);
+      if (upload.nextSibling !== language) {
+        bar.insertBefore(language, upload.nextSibling);
+      }
+      if (language.nextSibling !== health) {
+        bar.appendChild(health);
       }
 
       upload.classList.add("shrink-0");
-      if (language) language.classList.add("shrink-0");
+      language.classList.add("shrink-0");
       health.classList.add("shrink-0");
+      health.style.marginTop = "0";
       health.title = "تست سرویس Groq — برای بررسی دوباره کلیک کنید";
 
-      arranged = true;
-      return true;
-    };
-
-    const tick = () => {
-      if (arrange() || ++tries >= maxTries) return;
-      window.setTimeout(tick, 200);
-    };
-    tick();
-
-    const obs = new MutationObserver(() => {
-      if (!arranged) {
-        arrange();
-        return;
+      // Shorten label so it fits on one row on mobile
+      const labelSpan = health.querySelector("span.truncate");
+      if (labelSpan && health.dataset.shortened !== "1") {
+        // leave text as-is; truncation handles overflow
+        health.dataset.shortened = "1";
       }
-      const health = document.querySelector(
-        'button[title^="تست سرویس Groq"]',
-      );
-      const bar = document.querySelector("[data-upload-lang-health]");
-      if (health && bar && health.parentElement !== bar) arrange();
-    });
+    };
+
+    arrange();
+    const id = window.setInterval(arrange, 400);
+    const obs = new MutationObserver(arrange);
     obs.observe(document.body, { childList: true, subtree: true });
 
-    return () => obs.disconnect();
+    return () => {
+      window.clearInterval(id);
+      obs.disconnect();
+    };
   }, []);
 
   return null;
