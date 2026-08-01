@@ -123,12 +123,12 @@ async function transcribeOne(
       try { data = await res.json(); } catch { throw new Error(`پاسخ نامعتبر از سرور (کد ${res.status})`); }
       if (!res.ok) {
         const msg = data?.error || `خطا در پردازش فایل صوتی (${res.status})`;
-        if (res.status >= 500 || res.status === 429 || res.status === 408) {
-          lastError = new Error(msg);
+        lastError = new Error(msg);
+        if (attempt < CLIENT_RETRIES - 1) {
           await sleep(1200 * Math.pow(2, attempt));
           continue;
         }
-        throw new Error(msg);
+        throw lastError;
       }
       const textFromSegments = (data.segments ?? []).map((s: { text?: string }) => (s.text ?? "").trim()).join(" ").trim();
       const finalText = (data.text?.trim() || textFromSegments) ?? "";
