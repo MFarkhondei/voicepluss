@@ -63,7 +63,7 @@ const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 const SKIP_SECONDS = 10;
 const CANCEL_MSG = "عملیات لغو شد.";
 const CLIENT_TIMEOUT_MS = 240_000;
-const CLIENT_RETRIES = 4;
+const CLIENT_RETRIES = 3;
 
 function formatTime(sec: number) {
   if (!Number.isFinite(sec) || sec < 0) sec = 0;
