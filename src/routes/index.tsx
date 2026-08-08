@@ -49,7 +49,7 @@ type Segment = {
   confidence?: number | null;
 };
 type AnalysisMode = "quick" | "full";
-type OutputLanguage = "fa" | "en";
+type OutputLanguage = "fa" | "en" | "de";
 
 const TRANSCRIBE_MODEL = "whisper-large-v3";
 const LOW_CONFIDENCE = 0.55;
@@ -57,6 +57,7 @@ const LOW_CONFIDENCE = 0.55;
 const LANGUAGES: { id: OutputLanguage; label: string }[] = [
   { id: "fa", label: "فارسی" },
   { id: "en", label: "English" },
+  { id: "de", label: "Deutsch" },
 ];
 
 const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
