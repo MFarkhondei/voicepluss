@@ -162,7 +162,7 @@ export const Route = createFileRoute("/api/refine")({
           .filter((s) => s.text.length > 0);
         if (segments.length === 0) return Response.json({ error: "متنی برای بهبود ارسال نشده است." }, { status: 400 });
 
-        const language = body.language === "en" ? "en" : "fa";
+        const language = body.language === "en" ? "en" : body.language === "de" ? "de" : "fa";
         const diarize = body.diarize === true;
 
         try {
