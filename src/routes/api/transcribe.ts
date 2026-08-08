@@ -21,6 +21,7 @@ type Segment = {
 function normalizeLanguage(raw: unknown): string {
   const v = String(raw ?? "fa").trim().toLowerCase();
   if (v === "en" || v === "english" || v === "انگلیسی") return "en";
+  if (v === "de" || v === "german" || v === "deutsch" || v === "آلمانی") return "de";
   return "fa";
 }
 
