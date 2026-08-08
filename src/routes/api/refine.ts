@@ -17,14 +17,19 @@ type InSeg = { i: number; text: string };
 type OutSeg = { i: number; text: string; speaker?: string | null };
 
 function systemPrompt(language: string, diarize: boolean) {
-  const isFa = language !== "en";
-  const lang = isFa ? "Persian (Farsi)" : "English";
+  const isFa = language === "fa";
+  const isDe = language === "de";
+  const lang = isFa ? "Persian (Farsi)" : isDe ? "German (Deutsch)" : "English";
   const punct = isFa
     ? "Use correct Persian punctuation: ، . ؟ ! : ؛ «» — and ZWNJ (نیم‌فاصله) where needed (e.g. می‌شود، کتاب‌ها)."
-    : "Use correct English punctuation and capitalization.";
+    : isDe
+      ? "Use correct German punctuation, capitalization of nouns, and umlauts (ä, ö, ü, ß)."
+      : "Use correct English punctuation and capitalization.";
   const spelling = isFa
     ? "Fix common Persian STT spelling errors (همزه، ی/ک عربی vs فارسی، فاصلهٔ اشتباه، تکرار حروف) without changing meaning."
-    : "Fix obvious STT spelling mistakes without changing meaning.";
+    : isDe
+      ? "Fix common German STT spelling errors (missing umlauts, ss/ß, compound words) without changing meaning."
+      : "Fix obvious STT spelling mistakes without changing meaning.";
   return [
     `You clean up raw speech-to-text output in ${lang}.`,
     "For each input segment return the SAME segment index with corrected text.",
