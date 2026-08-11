@@ -830,6 +830,30 @@ function Index() {
                   const stopAt = stopAtRef.current;
                   if (stopAt != null && el.currentTime >= stopAt) {
                     stopAtRef.current = null;
+                    const idx = repeatIdxRef.current;
+                    if (repeatMode !== "off" && idx != null && segments[idx]) {
+                      const limit = repeatMode === "inf" ? Number.POSITIVE_INFINITY : Number(repeatMode);
+                      repeatDoneRef.current += 1;
+                      if (repeatDoneRef.current < limit) {
+                        const s = segments[idx];
+                        stopAtRef.current = s.end;
+                        el.currentTime = s.start;
+                        setCurrentTime(s.start);
+                        void el.play().catch(() => setPlaying(false));
+                        return;
+                      }
+                      const next = segments[idx + 1];
+                      if (next) {
+                        repeatIdxRef.current = idx + 1;
+                        repeatDoneRef.current = 0;
+                        stopAtRef.current = next.end;
+                        el.currentTime = next.start;
+                        setCurrentTime(next.start);
+                        void el.play().catch(() => setPlaying(false));
+                        return;
+                      }
+                      repeatIdxRef.current = null;
+                    }
                     el.pause();
                     el.currentTime = stopAt;
                     setCurrentTime(stopAt);
@@ -837,6 +861,7 @@ function Index() {
                   }
                   setCurrentTime(el.currentTime || 0);
                 }}
+
                 onPlay={() => setPlaying(true)}
                 onPause={() => setPlaying(false)}
                 onEnded={() => setPlaying(false)}
