@@ -848,6 +848,14 @@ function Index() {
                   const stopAt = stopAtRef.current;
                   if (stopAt != null && el.currentTime >= stopAt) {
                     stopAtRef.current = null;
+                    if (playOnlyRef.current) {
+                      playOnlyRef.current = false;
+                      repeatIdxRef.current = null;
+                      el.pause();
+                      el.currentTime = stopAt;
+                      setCurrentTime(stopAt);
+                      return;
+                    }
                     const idx = repeatIdxRef.current;
                     if (repeatMode !== "off" && idx != null && segments[idx]) {
                       const limit = repeatMode === "inf" ? Number.POSITIVE_INFINITY : Number(repeatMode);
