@@ -296,6 +296,9 @@ function Index() {
   const activeCardRef = useRef<HTMLLIElement | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
   const stopAtRef = useRef<number | null>(null);
+  const repeatIdxRef = useRef<number | null>(null);
+  const repeatDoneRef = useRef(0);
+
   const panelsRef = useRef<HTMLDivElement | null>(null);
   const textLockHRef = useRef<number | null>(null);
   const peakJobRef = useRef(0);
