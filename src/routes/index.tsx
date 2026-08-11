@@ -470,6 +470,7 @@ function Index() {
     const el = playerRef.current;
     if (!el || !audioUrl) return;
     if (!el.paused) {
+      playOnlyRef.current = false;
       stopAtRef.current = null;
       el.pause();
     }
