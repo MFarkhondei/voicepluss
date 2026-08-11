@@ -449,9 +449,19 @@ function Index() {
   const togglePlay = useCallback(() => {
     const el = playerRef.current;
     if (!el || !audioUrl) return;
-    if (el.paused) { stopAtRef.current = null; void el.play().catch(() => setPlaying(false)); }
-    else el.pause();
-  }, [audioUrl]);
+    if (el.paused) {
+      if (repeatMode !== "off" && activeSegmentIndex >= 0 && segments[activeSegmentIndex]) {
+        const s = segments[activeSegmentIndex];
+        repeatIdxRef.current = activeSegmentIndex;
+        repeatDoneRef.current = 0;
+        stopAtRef.current = s.end;
+      } else {
+        stopAtRef.current = null;
+        repeatIdxRef.current = null;
+      }
+      void el.play().catch(() => setPlaying(false));
+    } else el.pause();
+  }, [audioUrl, repeatMode, activeSegmentIndex, segments]);
   const pauseForEdit = useCallback(() => {
     const el = playerRef.current;
     if (!el || !audioUrl) return;
