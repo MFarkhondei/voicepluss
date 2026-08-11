@@ -905,7 +905,6 @@ function Index() {
                   title="تعداد تکرار هر بخش"
                 >
                   <option value="off">بدون تکرار</option>
-                  <option value="1">۱ بار</option>
                   <option value="2">۲ بار</option>
                   <option value="3">۳ بار</option>
                   <option value="4">۴ بار</option>
