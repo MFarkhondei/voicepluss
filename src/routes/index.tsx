@@ -433,11 +433,13 @@ function Index() {
     void el.play().catch(() => setPlaying(false));
   }, [audioUrl]);
   const playSegmentOnly = useCallback((s: Segment, i?: number) => {
+    playOnlyRef.current = true;
     repeatIdxRef.current = typeof i === "number" ? i : null;
     repeatDoneRef.current = 0;
     playFrom(s.start, s.end);
   }, [playFrom]);
   const playSegmentContinue = useCallback((s: Segment, i?: number) => {
+    playOnlyRef.current = false;
     if (repeatMode !== "off" && typeof i === "number") {
       repeatIdxRef.current = i;
       repeatDoneRef.current = 0;
