@@ -426,8 +426,21 @@ function Index() {
     setCurrentTime(next);
     void el.play().catch(() => setPlaying(false));
   }, [audioUrl]);
-  const playSegmentOnly = useCallback((s: Segment) => playFrom(s.start, s.end), [playFrom]);
-  const playSegmentContinue = useCallback((s: Segment) => playFrom(s.start, null), [playFrom]);
+  const playSegmentOnly = useCallback((s: Segment, i?: number) => {
+    repeatIdxRef.current = typeof i === "number" ? i : null;
+    repeatDoneRef.current = 0;
+    playFrom(s.start, s.end);
+  }, [playFrom]);
+  const playSegmentContinue = useCallback((s: Segment, i?: number) => {
+    if (repeatMode !== "off" && typeof i === "number") {
+      repeatIdxRef.current = i;
+      repeatDoneRef.current = 0;
+      playFrom(s.start, s.end);
+      return;
+    }
+    repeatIdxRef.current = null;
+    playFrom(s.start, null);
+  }, [playFrom, repeatMode]);
   const togglePlay = useCallback(() => {
     const el = playerRef.current;
     if (!el || !audioUrl) return;
