@@ -478,6 +478,7 @@ function Index() {
   const skip = useCallback((delta: number) => {
     const el = playerRef.current;
     if (!el) return;
+    playOnlyRef.current = false;
     const next = Math.max(0, Math.min(el.duration || 0, el.currentTime + delta));
     el.currentTime = next;
     setCurrentTime(next);
@@ -485,6 +486,7 @@ function Index() {
   const seekTo = useCallback((time: number) => {
     const el = playerRef.current;
     if (!el) return;
+    playOnlyRef.current = false;
     const next = Math.max(0, Math.min(el.duration || 0, time));
     el.currentTime = next;
     setCurrentTime(next);
@@ -493,6 +495,7 @@ function Index() {
     const el = playerRef.current;
     if (!el) return;
     const total = el.duration || duration || 0;
+    playOnlyRef.current = false;
     stopAtRef.current = null;
     const next = Math.max(0, Math.min(total, ratio * total));
     el.currentTime = next;
