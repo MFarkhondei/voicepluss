@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiTranslateRouteImport } from './routes/api/translate'
 import { Route as ApiTranscribeRouteImport } from './routes/api/transcribe'
 import { Route as ApiRefineRouteImport } from './routes/api/refine'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
@@ -24,6 +25,11 @@ const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiTranslateRoute = ApiTranslateRouteImport.update({
+  id: '/api/translate',
+  path: '/api/translate',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiTranscribeRoute = ApiTranscribeRouteImport.update({
@@ -54,6 +60,7 @@ export interface FileRoutesByFullPath {
   '/api/health': typeof ApiHealthRoute
   '/api/refine': typeof ApiRefineRoute
   '/api/transcribe': typeof ApiTranscribeRoute
+  '/api/translate': typeof ApiTranslateRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -62,6 +69,7 @@ export interface FileRoutesByTo {
   '/api/health': typeof ApiHealthRoute
   '/api/refine': typeof ApiRefineRoute
   '/api/transcribe': typeof ApiTranscribeRoute
+  '/api/translate': typeof ApiTranslateRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -71,6 +79,7 @@ export interface FileRoutesById {
   '/api/health': typeof ApiHealthRoute
   '/api/refine': typeof ApiRefineRoute
   '/api/transcribe': typeof ApiTranscribeRoute
+  '/api/translate': typeof ApiTranslateRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -81,6 +90,7 @@ export interface FileRouteTypes {
     | '/api/health'
     | '/api/refine'
     | '/api/transcribe'
+    | '/api/translate'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -89,6 +99,7 @@ export interface FileRouteTypes {
     | '/api/health'
     | '/api/refine'
     | '/api/transcribe'
+    | '/api/translate'
   id:
     | '__root__'
     | '/'
@@ -97,6 +108,7 @@ export interface FileRouteTypes {
     | '/api/health'
     | '/api/refine'
     | '/api/transcribe'
+    | '/api/translate'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -106,6 +118,7 @@ export interface RootRouteChildren {
   ApiHealthRoute: typeof ApiHealthRoute
   ApiRefineRoute: typeof ApiRefineRoute
   ApiTranscribeRoute: typeof ApiTranscribeRoute
+  ApiTranslateRoute: typeof ApiTranslateRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -122,6 +135,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/translate': {
+      id: '/api/translate'
+      path: '/api/translate'
+      fullPath: '/api/translate'
+      preLoaderRoute: typeof ApiTranslateRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/transcribe': {
@@ -162,6 +182,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiHealthRoute: ApiHealthRoute,
   ApiRefineRoute: ApiRefineRoute,
   ApiTranscribeRoute: ApiTranscribeRoute,
+  ApiTranslateRoute: ApiTranslateRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -20,6 +20,9 @@ import {
   ChevronDown,
   Wand2,
   Keyboard,
+  Languages,
+  Repeat,
+
 } from "lucide-react";
 import { encodeWav } from "@/lib/wav";
 import { toSrt, toTxt, downloadText, parseSrt } from "@/lib/subtitles";
@@ -159,14 +162,46 @@ function SegmentRow({
 }: {
   seg: Segment; index: number; isActive: boolean; hasAudio: boolean;
   cardRef?: (el: HTMLLIElement | null) => void;
-  onSeek: (t: number) => void; onPlayOnly: (s: Segment) => void; onPlayContinue: (s: Segment) => void;
+  onSeek: (t: number) => void; onPlayOnly: (s: Segment, i: number) => void; onPlayContinue: (s: Segment, i: number) => void;
   onChange: (index: number, value: string) => void;
   onEditStart?: () => void;
 }) {
   const [draft, setDraft] = useState(seg.text);
   const [editing, setEditing] = useState(false);
+  const [translation, setTranslation] = useState<string | null>(null);
+  const [translating, setTranslating] = useState(false);
+  const [translateError, setTranslateError] = useState<string | null>(null);
+  const taRef = useRef<HTMLTextAreaElement | null>(null);
   const low = isLowConfidence(seg.confidence);
   useEffect(() => { if (!editing) setDraft(seg.text); }, [seg.text, editing]);
+  useEffect(() => {
+    const el = taRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [draft]);
+
+  const translate = useCallback(async () => {
+    const value = draft.trim();
+    if (!value || translating) return;
+    setTranslating(true);
+    setTranslateError(null);
+    try {
+      const res = await fetch("/api/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: value }),
+      });
+      const data = (await res.json()) as { translation?: string; error?: string };
+      if (!res.ok || !data.translation) throw new Error(data.error || "ترجمه انجام نشد.");
+      setTranslation(data.translation);
+    } catch (err) {
+      setTranslateError(err instanceof Error ? err.message : "ترجمه انجام نشد.");
+    } finally {
+      setTranslating(false);
+    }
+  }, [draft, translating]);
+
   const baseClass = isActive
     ? "border-primary bg-primary/10 ring-1 ring-primary/40"
     : low
@@ -189,15 +224,27 @@ function SegmentRow({
       </div>
       <div className="flex min-w-0 items-start gap-2 sm:gap-3">
         <button type="button" onClick={() => onSeek(seg.start)} aria-label={`پرش به دقیقه ${formatTime(seg.start)}`} className="shrink-0 pt-1.5 font-mono text-xs text-muted-foreground hover:text-primary focus-visible:ring-2 focus-visible:ring-ring" title="پرش به این بخش">{formatTime(seg.start)}</button>
-        <textarea value={draft} aria-label={`متن بخش ${index + 1} از دقیقه ${formatTime(seg.start)}`} onFocus={() => { onEditStart?.(); setEditing(true); }} onChange={(e) => { setDraft(e.target.value); onChange(index, e.target.value); }} onBlur={() => setEditing(false)} rows={2} className="min-w-0 flex-1 resize-y rounded-lg border border-transparent bg-transparent p-1.5 text-right text-sm leading-7 outline-none focus:border-border focus:bg-card focus:ring-2 focus:ring-ring" dir="rtl" />
+        <div className="min-w-0 flex-1">
+          <textarea ref={taRef} value={draft} aria-label={`متن بخش ${index + 1} از دقیقه ${formatTime(seg.start)}`} onFocus={() => { onEditStart?.(); setEditing(true); }} onChange={(e) => { setDraft(e.target.value); onChange(index, e.target.value); }} onBlur={() => setEditing(false)} rows={1} className="block w-full resize-none overflow-hidden rounded-lg border border-transparent bg-transparent p-1.5 text-right text-sm leading-7 outline-none focus:border-border focus:bg-card focus:ring-2 focus:ring-ring" dir="rtl" />
+          {translation ? (
+            <p dir="rtl" className="mt-1.5 rounded-lg border border-accent/30 bg-accent/10 p-2 text-right text-sm leading-7">{translation}</p>
+          ) : null}
+          {translateError ? (
+            <p dir="rtl" className="mt-1.5 text-right text-xs text-destructive">{translateError}</p>
+          ) : null}
+        </div>
         <div className="flex shrink-0 flex-col gap-1.5">
-          <button type="button" onClick={() => onPlayOnly(seg)} disabled={!hasAudio} aria-label="فقط همین متن پخش شود" className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40" title="فقط همین متن پخش شود"><Play className="size-4" aria-hidden="true" /></button>
-          <button type="button" onClick={() => onPlayContinue(seg)} disabled={!hasAudio} aria-label="از این متن به بعد پخش شود" className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40" title="از این متن به بعد پخش شود"><SkipForward className="size-4" aria-hidden="true" /></button>
+          <button type="button" onClick={() => onPlayOnly(seg, index)} disabled={!hasAudio} aria-label="فقط همین متن پخش شود" className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40" title="فقط همین متن پخش شود"><Play className="size-4" aria-hidden="true" /></button>
+          <button type="button" onClick={() => onPlayContinue(seg, index)} disabled={!hasAudio} aria-label="از این متن به بعد پخش شود" className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40" title="از این متن به بعد پخش شود"><SkipForward className="size-4" aria-hidden="true" /></button>
+          <button type="button" onClick={() => void translate()} disabled={translating || !draft.trim()} aria-label="ترجمه به فارسی" className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40" title="ترجمه به فارسی">
+            {translating ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Languages className="size-4" aria-hidden="true" />}
+          </button>
         </div>
       </div>
     </li>
   );
 }
+
 
 function Index() {
   const [recording, setRecording] = useState(false);
@@ -230,6 +277,8 @@ function Index() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
+  const [repeatMode, setRepeatMode] = useState<"off" | "inf" | "1" | "2" | "3" | "4" | "5">("off");
+
   const [peaks, setPeaks] = useState<number[]>([]);
   const [peaksLoading, setPeaksLoading] = useState(false);
   const [refining, setRefining] = useState(false);
@@ -249,6 +298,9 @@ function Index() {
   const activeCardRef = useRef<HTMLLIElement | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
   const stopAtRef = useRef<number | null>(null);
+  const repeatIdxRef = useRef<number | null>(null);
+  const repeatDoneRef = useRef(0);
+
   const panelsRef = useRef<HTMLDivElement | null>(null);
   const textLockHRef = useRef<number | null>(null);
   const peakJobRef = useRef(0);
@@ -379,14 +431,37 @@ function Index() {
     setCurrentTime(next);
     void el.play().catch(() => setPlaying(false));
   }, [audioUrl]);
-  const playSegmentOnly = useCallback((s: Segment) => playFrom(s.start, s.end), [playFrom]);
-  const playSegmentContinue = useCallback((s: Segment) => playFrom(s.start, null), [playFrom]);
+  const playSegmentOnly = useCallback((s: Segment, i?: number) => {
+    repeatIdxRef.current = typeof i === "number" ? i : null;
+    repeatDoneRef.current = 0;
+    playFrom(s.start, s.end);
+  }, [playFrom]);
+  const playSegmentContinue = useCallback((s: Segment, i?: number) => {
+    if (repeatMode !== "off" && typeof i === "number") {
+      repeatIdxRef.current = i;
+      repeatDoneRef.current = 0;
+      playFrom(s.start, s.end);
+      return;
+    }
+    repeatIdxRef.current = null;
+    playFrom(s.start, null);
+  }, [playFrom, repeatMode]);
   const togglePlay = useCallback(() => {
     const el = playerRef.current;
     if (!el || !audioUrl) return;
-    if (el.paused) { stopAtRef.current = null; void el.play().catch(() => setPlaying(false)); }
-    else el.pause();
-  }, [audioUrl]);
+    if (el.paused) {
+      if (repeatMode !== "off" && activeSegmentIndex >= 0 && segments[activeSegmentIndex]) {
+        const s = segments[activeSegmentIndex];
+        repeatIdxRef.current = activeSegmentIndex;
+        repeatDoneRef.current = 0;
+        stopAtRef.current = s.end;
+      } else {
+        stopAtRef.current = null;
+        repeatIdxRef.current = null;
+      }
+      void el.play().catch(() => setPlaying(false));
+    } else el.pause();
+  }, [audioUrl, repeatMode, activeSegmentIndex, segments]);
   const pauseForEdit = useCallback(() => {
     const el = playerRef.current;
     if (!el || !audioUrl) return;
@@ -765,6 +840,30 @@ function Index() {
                   const stopAt = stopAtRef.current;
                   if (stopAt != null && el.currentTime >= stopAt) {
                     stopAtRef.current = null;
+                    const idx = repeatIdxRef.current;
+                    if (repeatMode !== "off" && idx != null && segments[idx]) {
+                      const limit = repeatMode === "inf" ? Number.POSITIVE_INFINITY : Number(repeatMode);
+                      repeatDoneRef.current += 1;
+                      if (repeatDoneRef.current < limit) {
+                        const s = segments[idx];
+                        stopAtRef.current = s.end;
+                        el.currentTime = s.start;
+                        setCurrentTime(s.start);
+                        void el.play().catch(() => setPlaying(false));
+                        return;
+                      }
+                      const next = segments[idx + 1];
+                      if (next) {
+                        repeatIdxRef.current = idx + 1;
+                        repeatDoneRef.current = 0;
+                        stopAtRef.current = next.end;
+                        el.currentTime = next.start;
+                        setCurrentTime(next.start);
+                        void el.play().catch(() => setPlaying(false));
+                        return;
+                      }
+                      repeatIdxRef.current = null;
+                    }
                     el.pause();
                     el.currentTime = stopAt;
                     setCurrentTime(stopAt);
@@ -772,17 +871,37 @@ function Index() {
                   }
                   setCurrentTime(el.currentTime || 0);
                 }}
+
                 onPlay={() => setPlaying(true)}
                 onPause={() => setPlaying(false)}
                 onEnded={() => setPlaying(false)}
                 className="hidden"
               />
-              <div className="mb-3 flex items-center justify-end gap-2 text-sm">
+              <div className="mb-3 flex flex-wrap items-center justify-end gap-2 text-sm">
+                <Repeat className="size-3.5 text-muted-foreground" />
+                <select
+                  value={repeatMode}
+                  onChange={(e) => {
+                    setRepeatMode(e.target.value as typeof repeatMode);
+                    repeatDoneRef.current = 0;
+                  }}
+                  className="rounded-lg border border-border bg-card px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  title="تعداد تکرار هر بخش"
+                >
+                  <option value="off">بدون تکرار</option>
+                  <option value="1">۱ بار</option>
+                  <option value="2">۲ بار</option>
+                  <option value="3">۳ بار</option>
+                  <option value="4">۴ بار</option>
+                  <option value="5">۵ بار</option>
+                  <option value="inf">تکرار نامحدود</option>
+                </select>
                 <Gauge className="size-3.5 text-muted-foreground" />
                 <select value={playbackRate} onChange={(e) => setPlaybackRate(Number(e.target.value))} className="rounded-lg border border-border bg-card px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-ring" title="سرعت پخش">
                   {PLAYBACK_RATES.map((r) => <option key={r} value={r}>{r === 1 ? "۱× عادی" : `${r}×`}</option>)}
                 </select>
               </div>
+
               <div className="mb-3">
                 <Waveform
                   peaks={peaks}
