@@ -300,6 +300,7 @@ function Index() {
   const stopAtRef = useRef<number | null>(null);
   const repeatIdxRef = useRef<number | null>(null);
   const repeatDoneRef = useRef(0);
+  const playOnlyRef = useRef(false);
 
   const panelsRef = useRef<HTMLDivElement | null>(null);
   const textLockHRef = useRef<number | null>(null);
@@ -432,11 +433,13 @@ function Index() {
     void el.play().catch(() => setPlaying(false));
   }, [audioUrl]);
   const playSegmentOnly = useCallback((s: Segment, i?: number) => {
+    playOnlyRef.current = true;
     repeatIdxRef.current = typeof i === "number" ? i : null;
     repeatDoneRef.current = 0;
     playFrom(s.start, s.end);
   }, [playFrom]);
   const playSegmentContinue = useCallback((s: Segment, i?: number) => {
+    playOnlyRef.current = false;
     if (repeatMode !== "off" && typeof i === "number") {
       repeatIdxRef.current = i;
       repeatDoneRef.current = 0;
@@ -450,6 +453,7 @@ function Index() {
     const el = playerRef.current;
     if (!el || !audioUrl) return;
     if (el.paused) {
+      playOnlyRef.current = false;
       if (repeatMode !== "off" && activeSegmentIndex >= 0 && segments[activeSegmentIndex]) {
         const s = segments[activeSegmentIndex];
         repeatIdxRef.current = activeSegmentIndex;
@@ -466,6 +470,7 @@ function Index() {
     const el = playerRef.current;
     if (!el || !audioUrl) return;
     if (!el.paused) {
+      playOnlyRef.current = false;
       stopAtRef.current = null;
       el.pause();
     }
@@ -473,6 +478,7 @@ function Index() {
   const skip = useCallback((delta: number) => {
     const el = playerRef.current;
     if (!el) return;
+    playOnlyRef.current = false;
     const next = Math.max(0, Math.min(el.duration || 0, el.currentTime + delta));
     el.currentTime = next;
     setCurrentTime(next);
@@ -480,6 +486,7 @@ function Index() {
   const seekTo = useCallback((time: number) => {
     const el = playerRef.current;
     if (!el) return;
+    playOnlyRef.current = false;
     const next = Math.max(0, Math.min(el.duration || 0, time));
     el.currentTime = next;
     setCurrentTime(next);
@@ -488,6 +495,7 @@ function Index() {
     const el = playerRef.current;
     if (!el) return;
     const total = el.duration || duration || 0;
+    playOnlyRef.current = false;
     stopAtRef.current = null;
     const next = Math.max(0, Math.min(total, ratio * total));
     el.currentTime = next;
@@ -840,6 +848,14 @@ function Index() {
                   const stopAt = stopAtRef.current;
                   if (stopAt != null && el.currentTime >= stopAt) {
                     stopAtRef.current = null;
+                    if (playOnlyRef.current) {
+                      playOnlyRef.current = false;
+                      repeatIdxRef.current = null;
+                      el.pause();
+                      el.currentTime = stopAt;
+                      setCurrentTime(stopAt);
+                      return;
+                    }
                     const idx = repeatIdxRef.current;
                     if (repeatMode !== "off" && idx != null && segments[idx]) {
                       const limit = repeatMode === "inf" ? Number.POSITIVE_INFINITY : Number(repeatMode);
@@ -889,7 +905,6 @@ function Index() {
                   title="تعداد تکرار هر بخش"
                 >
                   <option value="off">بدون تکرار</option>
-                  <option value="1">۱ بار</option>
                   <option value="2">۲ بار</option>
                   <option value="3">۳ بار</option>
                   <option value="4">۴ بار</option>
