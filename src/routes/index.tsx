@@ -300,6 +300,7 @@ function Index() {
   const stopAtRef = useRef<number | null>(null);
   const repeatIdxRef = useRef<number | null>(null);
   const repeatDoneRef = useRef(0);
+  const playOnlyRef = useRef(false);
 
   const panelsRef = useRef<HTMLDivElement | null>(null);
   const textLockHRef = useRef<number | null>(null);
