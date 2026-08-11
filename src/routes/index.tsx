@@ -20,6 +20,9 @@ import {
   ChevronDown,
   Wand2,
   Keyboard,
+  Languages,
+  Repeat,
+
 } from "lucide-react";
 import { encodeWav } from "@/lib/wav";
 import { toSrt, toTxt, downloadText, parseSrt } from "@/lib/subtitles";
