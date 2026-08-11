@@ -867,12 +867,31 @@ function Index() {
                 onEnded={() => setPlaying(false)}
                 className="hidden"
               />
-              <div className="mb-3 flex items-center justify-end gap-2 text-sm">
+              <div className="mb-3 flex flex-wrap items-center justify-end gap-2 text-sm">
+                <Repeat className="size-3.5 text-muted-foreground" />
+                <select
+                  value={repeatMode}
+                  onChange={(e) => {
+                    setRepeatMode(e.target.value as typeof repeatMode);
+                    repeatDoneRef.current = 0;
+                  }}
+                  className="rounded-lg border border-border bg-card px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  title="تعداد تکرار هر بخش"
+                >
+                  <option value="off">بدون تکرار</option>
+                  <option value="1">۱ بار</option>
+                  <option value="2">۲ بار</option>
+                  <option value="3">۳ بار</option>
+                  <option value="4">۴ بار</option>
+                  <option value="5">۵ بار</option>
+                  <option value="inf">تکرار نامحدود</option>
+                </select>
                 <Gauge className="size-3.5 text-muted-foreground" />
                 <select value={playbackRate} onChange={(e) => setPlaybackRate(Number(e.target.value))} className="rounded-lg border border-border bg-card px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-ring" title="سرعت پخش">
                   {PLAYBACK_RATES.map((r) => <option key={r} value={r}>{r === 1 ? "۱× عادی" : `${r}×`}</option>)}
                 </select>
               </div>
+
               <div className="mb-3">
                 <Waveform
                   peaks={peaks}
