@@ -453,6 +453,7 @@ function Index() {
     const el = playerRef.current;
     if (!el || !audioUrl) return;
     if (el.paused) {
+      playOnlyRef.current = false;
       if (repeatMode !== "off" && activeSegmentIndex >= 0 && segments[activeSegmentIndex]) {
         const s = segments[activeSegmentIndex];
         repeatIdxRef.current = activeSegmentIndex;
