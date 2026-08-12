@@ -320,6 +320,9 @@ function Index() {
   const panelsRef = useRef<HTMLDivElement | null>(null);
   const textLockHRef = useRef<number | null>(null);
   const peakJobRef = useRef(0);
+  const currentItemIdRef = useRef<string | null>(null);
+  const pendingSeekRef = useRef<number | null>(null);
+  const lastSavedTimeRef = useRef(0);
 
   const setSourceFromBlob = useCallback((blob: Blob, opts?: { skipPeaks?: boolean }) => {
     if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
