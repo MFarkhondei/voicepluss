@@ -340,7 +340,7 @@ function Index() {
   const seekCleanupRef = useRef<(() => void) | null>(null);
   const lastSavedTimeRef = useRef(0);
 
-  const setSourceFromBlob = useCallback((blob: Blob, opts?: { skipPeaks?: boolean }) => {
+  const setSourceFromBlob = useCallback((blob: Blob, opts?: { skipPeaks?: boolean; initialDuration?: number | null }) => {
     if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
     // Generic "audio/*" is not a valid media type for HTMLAudioElement in some browsers
     let srcBlob = blob;
@@ -353,7 +353,13 @@ function Index() {
     setAudioUrl(url);
     setPlaying(false);
     setCurrentTime(0);
-    setDuration(0);
+    // Recordings (MediaRecorder webm blobs) often report duration as Infinity/NaN
+    // until the browser finishes indexing them, which leaves the slider's max at 0
+    // and makes it collapse to the end. Seed a known duration (saved earlier for this
+    // library item) right away so the slider is usable immediately; onDurationChange
+    // will correct it once the browser figures out the real value.
+    const initialDur = opts?.initialDuration && opts.initialDuration > 0 ? opts.initialDuration : 0;
+    setDuration(initialDur);
     // CRITICAL: clear leftover segment-stop state from previous play,
     // otherwise onTimeUpdate immediately jumps to an old stopAt (looks like EOF).
     stopAtRef.current = null;
@@ -446,7 +452,7 @@ function Index() {
       lastSavedTimeRef.current = resume;
       pendingPlayRef.current = true;
       // skipPeaks: avoid concurrent decodeAudioData while HTMLAudioElement starts
-      setSourceFromBlob(item.blob, { skipPeaks: true });
+      setSourceFromBlob(item.blob, { skipPeaks: true, initialDuration: knownDur });
       window.setTimeout(() => loadPeaksFromBlob(item.blob), 600);
     } finally {
       setLoadingItemId(null);
@@ -1084,10 +1090,17 @@ function Index() {
                 ref={playerRef}
                 src={audioUrl}
                 preload="auto"
+                onDurationChange={(e) => {
+                  // Recorded (MediaRecorder) blobs can report duration as Infinity/NaN
+                  // at first; the browser fixes it up later and fires this event.
+                  // Keep the slider's max in sync whenever that happens.
+                  const d = e.currentTarget.duration;
+                  if (Number.isFinite(d) && d > 0) setDuration(d);
+                }}
                 onLoadedMetadata={(e) => {
                   const el = e.currentTarget;
                   const dur = Number.isFinite(el.duration) ? el.duration : 0;
-                  setDuration(dur > 0 ? dur : 0);
+                  if (dur > 0) setDuration(dur);
                   // When auto-playing from playlist, onCanPlay owns the seek.
                   // Only apply resume here for silent load (no pending play).
                   if (pendingPlayRef.current) return;
@@ -1276,7 +1289,7 @@ function Index() {
               </div>
               <div dir="ltr" className="mb-1 flex min-w-0 items-center gap-2 text-xs font-mono text-muted-foreground sm:gap-3">
                 <span className="w-9 shrink-0 tabular-nums sm:w-10">{formatTime(currentTime)}</span>
-                <input type="range" min={0} max={Number.isFinite(duration) && duration > 0 ? duration : 0} step={0.1} value={Number.isFinite(currentTime) ? Math.min(Math.max(0, currentTime), Number.isFinite(duration) && duration > 0 ? duration : 0) : 0} onChange={(e) => seekTo(Number(e.target.value))} onInput={(e) => seekTo(Number((e.target as HTMLInputElement).value))} className="h-2 min-w-0 flex-1 cursor-pointer accent-primary" aria-label="موقعیت پخش" />
+                <input type="range" min={0} max={Number.isFinite(duration) && duration > 0 ? duration : 0} step={0.1} value={Number.isFinite(currentTime) ? Math.min(Math.max(0, currentTime), Number.isFinite(duration) && duration > 0 ? duration : 0) : 0} onInput={(e) => seekTo(Number((e.target as HTMLInputElement).value))} className="h-2 min-w-0 flex-1 cursor-pointer accent-primary" aria-label="موقعیت پخش" />
                 <span className="w-9 shrink-0 text-end tabular-nums sm:w-10">{formatTime(duration)}</span>
               </div>
               <div dir="ltr" className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center">
