@@ -337,6 +337,7 @@ function Index() {
   const pendingSeekRef = useRef<number | null>(null);
   const pendingPlayRef = useRef(false);
   const loadGenRef = useRef(0);
+  const seekCleanupRef = useRef<(() => void) | null>(null);
   const lastSavedTimeRef = useRef(0);
 
   const setSourceFromBlob = useCallback((blob: Blob, opts?: { skipPeaks?: boolean }) => {
@@ -556,12 +557,19 @@ function Index() {
   const playFrom = useCallback((start: number, stopAt: number | null) => {
     const el = playerRef.current;
     if (!el || !audioUrl) return;
-    const next = Math.max(0, Math.min(el.duration || 0, start));
+    if (seekCleanupRef.current) {
+      seekCleanupRef.current();
+      seekCleanupRef.current = null;
+    }
+    pendingPlayRef.current = false;
+    pendingSeekRef.current = null;
+    const total = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : (duration || 0);
+    const next = Math.max(0, Math.min(total || 0, start));
     stopAtRef.current = stopAt;
-    el.currentTime = next;
+    try { el.currentTime = next; } catch { /* ignore */ }
     setCurrentTime(next);
     void el.play().catch(() => setPlaying(false));
-  }, [audioUrl]);
+  }, [audioUrl, duration]);
   const playSegmentOnly = useCallback((s: Segment, i?: number) => {
     playOnlyRef.current = true;
     repeatIdxRef.current = typeof i === "number" ? i : null;
@@ -605,32 +613,57 @@ function Index() {
       el.pause();
     }
   }, [audioUrl]);
+  const clearMediaControlState = useCallback(() => {
+    stopAtRef.current = null;
+    playOnlyRef.current = false;
+    // keep repeatMode preference, but cancel an in-progress segment-repeat chain
+    repeatIdxRef.current = null;
+    repeatDoneRef.current = 0;
+    pendingPlayRef.current = false;
+    pendingSeekRef.current = null;
+    if (seekCleanupRef.current) {
+      seekCleanupRef.current();
+      seekCleanupRef.current = null;
+    }
+  }, []);
+
+  const safeDuration = useCallback((el?: HTMLAudioElement | null) => {
+    const d1 = el && Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 0;
+    const d2 = Number.isFinite(duration) && duration > 0 ? duration : 0;
+    return d1 || d2 || 0;
+  }, [duration]);
+
   const skip = useCallback((delta: number) => {
     const el = playerRef.current;
     if (!el) return;
-    playOnlyRef.current = false;
-    const next = Math.max(0, Math.min(el.duration || 0, el.currentTime + delta));
-    el.currentTime = next;
+    clearMediaControlState();
+    const total = safeDuration(el);
+    const next = Math.max(0, Math.min(total, (el.currentTime || 0) + delta));
+    try { el.currentTime = next; } catch { /* ignore */ }
     setCurrentTime(next);
-  }, []);
+  }, [clearMediaControlState, safeDuration]);
+
   const seekTo = useCallback((time: number) => {
     const el = playerRef.current;
     if (!el) return;
-    playOnlyRef.current = false;
-    const next = Math.max(0, Math.min(el.duration || 0, time));
-    el.currentTime = next;
+    clearMediaControlState();
+    const total = safeDuration(el);
+    const t = Number(time);
+    const next = Math.max(0, Math.min(total, Number.isFinite(t) ? t : 0));
+    try { el.currentTime = next; } catch { /* ignore */ }
     setCurrentTime(next);
-  }, []);
+  }, [clearMediaControlState, safeDuration]);
+
   const seekRatio = useCallback((ratio: number) => {
     const el = playerRef.current;
     if (!el) return;
-    const total = el.duration || duration || 0;
-    playOnlyRef.current = false;
-    stopAtRef.current = null;
-    const next = Math.max(0, Math.min(total, ratio * total));
-    el.currentTime = next;
+    clearMediaControlState();
+    const total = safeDuration(el);
+    const r = Number.isFinite(ratio) ? Math.min(1, Math.max(0, ratio)) : 0;
+    const next = Math.max(0, Math.min(total, r * total));
+    try { el.currentTime = next; } catch { /* ignore */ }
     setCurrentTime(next);
-  }, [duration]);
+  }, [clearMediaControlState, safeDuration]);
 
   const refineTranscript = useCallback(async () => {
     if (segments.length === 0 || refining) return;
@@ -1102,26 +1135,30 @@ function Index() {
                   };
 
                   if (startAt > 0.05) {
-                    const onSeeked = () => {
-                      el.removeEventListener("seeked", onSeeked);
+                    let done = false;
+                    const finish = () => {
+                      if (done) return;
+                      done = true;
+                      if (seekCleanupRef.current) {
+                        seekCleanupRef.current();
+                        seekCleanupRef.current = null;
+                      }
                       setCurrentTime(el.currentTime || startAt);
                       doPlay();
                     };
+                    const onSeeked = () => finish();
                     el.addEventListener("seeked", onSeeked);
+                    const timer = window.setTimeout(finish, 500);
+                    seekCleanupRef.current = () => {
+                      el.removeEventListener("seeked", onSeeked);
+                      window.clearTimeout(timer);
+                    };
                     try {
                       el.currentTime = startAt;
                       setCurrentTime(startAt);
                     } catch {
-                      el.removeEventListener("seeked", onSeeked);
-                      setCurrentTime(0);
-                      doPlay();
-                      return;
+                      finish();
                     }
-                    // fallback if seeked never fires
-                    window.setTimeout(() => {
-                      el.removeEventListener("seeked", onSeeked);
-                      doPlay();
-                    }, 500);
                   } else {
                     try { el.currentTime = 0; } catch { /* ignore */ }
                     setCurrentTime(0);
@@ -1239,7 +1276,7 @@ function Index() {
               </div>
               <div dir="ltr" className="mb-1 flex min-w-0 items-center gap-2 text-xs font-mono text-muted-foreground sm:gap-3">
                 <span className="w-9 shrink-0 tabular-nums sm:w-10">{formatTime(currentTime)}</span>
-                <input type="range" min={0} max={duration || 0} step={0.1} value={Math.min(currentTime, duration || 0)} onChange={(e) => seekTo(Number(e.target.value))} className="h-2 min-w-0 flex-1 cursor-pointer accent-primary" aria-label="موقعیت پخش" />
+                <input type="range" min={0} max={Number.isFinite(duration) && duration > 0 ? duration : 0} step={0.1} value={Number.isFinite(currentTime) ? Math.min(Math.max(0, currentTime), Number.isFinite(duration) && duration > 0 ? duration : 0) : 0} onChange={(e) => seekTo(Number(e.target.value))} onInput={(e) => seekTo(Number((e.target as HTMLInputElement).value))} className="h-2 min-w-0 flex-1 cursor-pointer accent-primary" aria-label="موقعیت پخش" />
                 <span className="w-9 shrink-0 text-end tabular-nums sm:w-10">{formatTime(duration)}</span>
               </div>
               <div dir="ltr" className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center">
