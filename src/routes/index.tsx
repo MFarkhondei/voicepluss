@@ -790,6 +790,10 @@ function Index() {
     textLockHRef.current = null;
     setTextLockH(null);
     clearAnalysis();
+    currentItemIdRef.current = null;
+    setCurrentItemId(null);
+    lastSavedTimeRef.current = 0;
+    pendingSeekRef.current = null;
     setFileName(file.name);
     setSourceFromBlob(file);
     setPendingFile(file);
@@ -807,11 +811,13 @@ function Index() {
     try {
       const parsed = parseSrt(await file.text());
       if (parsed.length === 0) { setError("فایل زیرنویس معتبر نبود یا خالی است."); return; }
+      const audioFile = pendingFile;
       setSegments(parsed);
       setText(parsed.map((s) => s.text.trim()).filter(Boolean).join(" ").trim());
       setError(null);
       setPendingFile(null);
       setOnlyLowConfidence(false);
+      if (!currentItemIdRef.current && audioFile) await rememberFile(audioFile, audioFile.name);
     } catch { setError("خواندن فایل زیرنویس ممکن نشد."); }
   };
 
