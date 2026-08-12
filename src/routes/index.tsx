@@ -712,7 +712,17 @@ function Index() {
       setProgressLabel(null);
       if (abortRef.current === ac) abortRef.current = null;
     }
-  }, [language, cancelJob, clearAnalysis, setSourceFromBlob, loadPeaksFromBlob]);
+  }, [language, cancelJob, clearAnalysis, setSourceFromBlob, loadPeaksFromBlob, rememberFile]);
+
+  // ذخیرهٔ خودکار متن و بخش‌ها روی آیتم فعلی پلی‌لیست
+  useEffect(() => {
+    const id = currentItemIdRef.current;
+    if (!id) return;
+    const t = setTimeout(() => {
+      void updateLibraryItem(id, { text, segments, duration: duration || null }).then(() => refreshLibrary());
+    }, 800);
+    return () => clearTimeout(t);
+  }, [text, segments, duration, refreshLibrary]);
 
   const runAnalysis = useCallback(async (mode: AnalysisMode = "quick") => {
     const payload = text.trim() || segments.map((s) => s.text.trim()).filter(Boolean).join(" ").trim();
