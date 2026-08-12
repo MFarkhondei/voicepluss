@@ -940,7 +940,16 @@ function Index() {
                 ref={playerRef}
                 src={audioUrl}
                 preload="metadata"
-                onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
+                onLoadedMetadata={(e) => {
+                  const el = e.currentTarget;
+                  setDuration(el.duration || 0);
+                  const seek = pendingSeekRef.current;
+                  pendingSeekRef.current = null;
+                  if (seek != null && Number.isFinite(el.duration) && seek < el.duration) {
+                    el.currentTime = seek;
+                    setCurrentTime(seek);
+                  }
+                }}
                 onTimeUpdate={(e) => {
                   const el = e.currentTarget;
                   const stopAt = stopAtRef.current;
