@@ -1124,59 +1124,92 @@ function Index() {
                   repeatIdxRef.current = null;
                   repeatDoneRef.current = 0;
 
-                  const dur = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 0;
-                  if (dur > 0) setDuration(dur);
-
-                  // resolve resume position safely against real duration
-                  let startAt = 0;
                   const seek = pendingSeekRef.current;
                   pendingSeekRef.current = null;
-                  if (seek != null && seek > 0) {
-                    if (dur > 0) {
-                      startAt = Math.min(seek, Math.max(0, dur - 1));
-                      if (startAt >= dur - 0.5) startAt = 0;
-                    } else {
-                      startAt = seek;
-                    }
-                  }
 
-                  try { el.playbackRate = playbackRate; } catch { /* ignore */ }
-
-                  const doPlay = () => {
+                  // Everything below needs the REAL duration to compute a safe resume
+                  // position and to fix the slider. Do this after duration is known.
+                  const proceed = (dur: number) => {
                     if (loadGenRef.current !== gen) return;
-                    void el.play().catch(() => setPlaying(false));
+                    if (dur > 0) setDuration(dur);
+
+                    // resolve resume position safely against the real duration;
+                    // never resume into the last ~1s (that looked like an instant jump to EOF)
+                    let startAt = 0;
+                    if (seek != null && seek > 0) {
+                      startAt = dur > 0 && seek >= dur - 1 ? 0 : seek;
+                    }
+
+                    try { el.playbackRate = playbackRate; } catch { /* ignore */ }
+
+                    const doPlay = () => {
+                      if (loadGenRef.current !== gen) return;
+                      void el.play().catch(() => setPlaying(false));
+                    };
+
+                    if (startAt > 0.05) {
+                      let done = false;
+                      const finish = () => {
+                        if (done) return;
+                        done = true;
+                        if (seekCleanupRef.current) {
+                          seekCleanupRef.current();
+                          seekCleanupRef.current = null;
+                        }
+                        setCurrentTime(el.currentTime || startAt);
+                        doPlay();
+                      };
+                      const onSeeked = () => finish();
+                      el.addEventListener("seeked", onSeeked);
+                      const timer = window.setTimeout(finish, 500);
+                      seekCleanupRef.current = () => {
+                        el.removeEventListener("seeked", onSeeked);
+                        window.clearTimeout(timer);
+                      };
+                      try {
+                        el.currentTime = startAt;
+                        setCurrentTime(startAt);
+                      } catch {
+                        finish();
+                      }
+                    } else {
+                      try { el.currentTime = 0; } catch { /* ignore */ }
+                      setCurrentTime(0);
+                      doPlay();
+                    }
                   };
 
-                  if (startAt > 0.05) {
-                    let done = false;
-                    const finish = () => {
-                      if (done) return;
-                      done = true;
-                      if (seekCleanupRef.current) {
-                        seekCleanupRef.current();
-                        seekCleanupRef.current = null;
-                      }
-                      setCurrentTime(el.currentTime || startAt);
-                      doPlay();
-                    };
-                    const onSeeked = () => finish();
-                    el.addEventListener("seeked", onSeeked);
-                    const timer = window.setTimeout(finish, 500);
-                    seekCleanupRef.current = () => {
-                      el.removeEventListener("seeked", onSeeked);
-                      window.clearTimeout(timer);
-                    };
-                    try {
-                      el.currentTime = startAt;
-                      setCurrentTime(startAt);
-                    } catch {
-                      finish();
-                    }
-                  } else {
-                    try { el.currentTime = 0; } catch { /* ignore */ }
-                    setCurrentTime(0);
-                    doPlay();
+                  const nativeDur = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 0;
+                  if (nativeDur > 0) {
+                    proceed(nativeDur);
+                    return;
                   }
+
+                  // Duration unknown (Infinity/NaN/0) — common for recorded (MediaRecorder)
+                  // blobs whose container has no duration in its header. Force the browser
+                  // to compute the real value (seek far forward triggers indexing) BEFORE
+                  // resuming/playing, otherwise the resume position and the slider end up
+                  // wrong ("jumps to the end" when the slider is touched).
+                  let settled = false;
+                  const finishPriming = (dur: number) => {
+                    if (settled) return;
+                    settled = true;
+                    el.removeEventListener("durationchange", onDurationFixed);
+                    el.removeEventListener("timeupdate", onTimeUpdateOnce);
+                    window.clearTimeout(fallbackTimer);
+                    proceed(dur);
+                  };
+                  const onDurationFixed = () => {
+                    if (Number.isFinite(el.duration) && el.duration > 0) finishPriming(el.duration);
+                  };
+                  const onTimeUpdateOnce = () => {
+                    const d = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 0;
+                    finishPriming(d);
+                  };
+                  const fallbackTimer = window.setTimeout(() => finishPriming(0), 800);
+                  el.addEventListener("durationchange", onDurationFixed);
+                  el.addEventListener("timeupdate", onTimeUpdateOnce, { once: true });
+                  try { el.currentTime = 1e101; } catch { finishPriming(0); }
                 }}
                 onTimeUpdate={(e) => {
                   const el = e.currentTarget;
