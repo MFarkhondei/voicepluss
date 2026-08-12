@@ -22,7 +22,9 @@ import {
   Keyboard,
   Languages,
   Repeat,
-
+  ListMusic,
+  X,
+  Clock,
 } from "lucide-react";
 import { encodeWav } from "@/lib/wav";
 import { toSrt, toTxt, downloadText, parseSrt } from "@/lib/subtitles";
@@ -30,6 +32,16 @@ import { prepareAudioForTranscription, DEFAULT_PART_MINUTES } from "@/lib/splitA
 import { extractPeaks } from "@/lib/waveform";
 import { Waveform } from "@/components/Waveform";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import {
+  listLibrary,
+  getLibraryItem,
+  putLibraryItem,
+  updateLibraryItem,
+  deleteLibraryItem,
+  makeLibraryId,
+  formatLibraryDate,
+  type LibraryMeta,
+} from "@/lib/library";
 
 export const Route = createFileRoute("/")({
   head: () => ({
