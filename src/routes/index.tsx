@@ -298,6 +298,9 @@ function Index() {
   const [diarize, setDiarize] = useState(false);
   const [status, setStatus] = useState("");
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [library, setLibrary] = useState<LibraryMeta[]>([]);
+  const [currentItemId, setCurrentItemId] = useState<string | null>(null);
+  const [loadingItemId, setLoadingItemId] = useState<string | null>(null);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
