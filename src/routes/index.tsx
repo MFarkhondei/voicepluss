@@ -355,6 +355,74 @@ function Index() {
 
   useEffect(() => () => { if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current); }, []);
 
+  // ————— پلی‌لیست: فایل‌های اجراشدهٔ قبلی از حافظهٔ مرورگر —————
+  const refreshLibrary = useCallback(async () => {
+    setLibrary(await listLibrary());
+  }, []);
+  useEffect(() => { void refreshLibrary(); }, [refreshLibrary]);
+
+  const rememberFile = useCallback(async (blob: Blob, name: string) => {
+    const id = makeLibraryId();
+    currentItemIdRef.current = id;
+    setCurrentItemId(id);
+    lastSavedTimeRef.current = 0;
+    const now = Date.now();
+    await putLibraryItem({
+      id,
+      name,
+      createdAt: now,
+      updatedAt: now,
+      size: blob.size,
+      type: blob.type || "audio/*",
+      duration: null,
+      lastTime: 0,
+      text: "",
+      segments: [],
+      blob,
+    });
+    await refreshLibrary();
+    return id;
+  }, [refreshLibrary]);
+
+  const openLibraryItem = useCallback(async (id: string) => {
+    setLoadingItemId(id);
+    try {
+      const item = await getLibraryItem(id);
+      if (!item) { await refreshLibrary(); return; }
+      cancelJob();
+      currentItemIdRef.current = id;
+      setCurrentItemId(id);
+      setError(null);
+      setPendingFile(null);
+      setSegmentQuery("");
+      setOnlyLowConfidence(false);
+      clearAnalysis();
+      setFileName(item.name);
+      setSegments(item.segments);
+      setText(item.text);
+      pendingSeekRef.current = item.lastTime > 1 ? item.lastTime : null;
+      lastSavedTimeRef.current = item.lastTime;
+      setSourceFromBlob(item.blob);
+    } finally {
+      setLoadingItemId(null);
+    }
+  }, [cancelJob, clearAnalysis, refreshLibrary, setSourceFromBlob]);
+
+  const removeLibraryItem = useCallback(async (id: string) => {
+    await deleteLibraryItem(id);
+    if (currentItemIdRef.current === id) { currentItemIdRef.current = null; setCurrentItemId(null); }
+    await refreshLibrary();
+  }, [refreshLibrary]);
+
+  const rememberProgress = useCallback((time: number) => {
+    const id = currentItemIdRef.current;
+    if (!id) return;
+    if (Math.abs(time - lastSavedTimeRef.current) < 4) return;
+    lastSavedTimeRef.current = time;
+    void updateLibraryItem(id, { lastTime: time });
+  }, []);
+
+
   // تست کوتاه سرویس Groq هنگام باز شدن برنامه
   const runHealthCheck = useCallback(async () => {
     setHealth({ state: "checking", message: "در حال بررسی سرویس…" });
