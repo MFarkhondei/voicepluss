@@ -299,7 +299,7 @@ function Index() {
   const [repeatMode, setRepeatMode] = useState<"off" | "inf" | "1" | "2" | "3" | "4" | "5">(() => {
     try {
       const v = localStorage.getItem("vp_repeatMode");
-      if (v === "off" || v === "inf" || v === "1" || v === "2" || v === "3" || v === "4" || v === "5") return v;
+      if (v === "off" || v === "inf" || ["1","2","3","4","5"].includes(v)) return v as any;
     } catch {}
     return "off";
   });
@@ -341,15 +341,20 @@ function Index() {
 
   const setSourceFromBlob = useCallback((blob: Blob, opts?: { skipPeaks?: boolean }) => {
     if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
-    const url = URL.createObjectURL(blob);
+    // Generic "audio/*" is not a valid media type for HTMLAudioElement in some browsers
+    let srcBlob = blob;
+    if ((blob.type || "").trim() === "audio/*") {
+      srcBlob = new Blob([blob], { type: "audio/webm" });
+    }
+    const url = URL.createObjectURL(srcBlob);
     audioUrlRef.current = url;
-    // new generation — ignore stale canplay/timeupdate from previous blob
     loadGenRef.current += 1;
     setAudioUrl(url);
     setPlaying(false);
     setCurrentTime(0);
     setDuration(0);
-    // keep last playbackRate / repeatMode; clear segment-play state so playlist load doesn't jump
+    // CRITICAL: clear leftover segment-stop state from previous play,
+    // otherwise onTimeUpdate immediately jumps to an old stopAt (looks like EOF).
     stopAtRef.current = null;
     playOnlyRef.current = false;
     repeatIdxRef.current = null;
@@ -424,16 +429,20 @@ function Index() {
       setFileName(item.name);
       setSegments(item.segments);
       setText(item.text);
-      // Always start from the beginning when opening from playlist.
-      // Auto-resume was causing seek races (start ↔ end oscillation / hang).
-      pendingSeekRef.current = 0;
+      // Always start from the beginning on playlist click (stable).
+      // Seeking to lastTime was the main cause of jump-to-end.
+      pendingSeekRef.current = null;
       lastSavedTimeRef.current = 0;
       pendingPlayRef.current = true;
-      setSourceFromBlob(item.blob);
+      // skipPeaks: avoid concurrent decodeAudioData while HTMLAudioElement starts —
+      // that combo can make some browsers seek erratically / hang.
+      setSourceFromBlob(item.blob, { skipPeaks: true });
+      // load waveform after a short delay so playback can start cleanly
+      window.setTimeout(() => loadPeaksFromBlob(item.blob), 600);
     } finally {
       setLoadingItemId(null);
     }
-  }, [cancelJob, clearAnalysis, refreshLibrary, setSourceFromBlob]);
+  }, [cancelJob, clearAnalysis, refreshLibrary, setSourceFromBlob, loadPeaksFromBlob]);
 
   const removeLibraryItem = useCallback(async (id: string) => {
     await deleteLibraryItem(id);
@@ -445,12 +454,9 @@ function Index() {
     const id = currentItemIdRef.current;
     if (!id) return;
     if (Math.abs(time - lastSavedTimeRef.current) < 4) return;
-    const el = playerRef.current;
-    const dur = el?.duration || duration || 0;
-    const saveT = (dur > 0 && time >= dur - 0.75) ? 0 : time;
-    lastSavedTimeRef.current = saveT;
-    void updateLibraryItem(id, { lastTime: saveT });
-  }, [duration]);
+    lastSavedTimeRef.current = time;
+    void updateLibraryItem(id, { lastTime: time });
+  }, []);
 
 
   // تست کوتاه سرویس Groq هنگام باز شدن برنامه
@@ -478,12 +484,8 @@ function Index() {
     return () => mq.removeEventListener("change", apply);
   }, []);
   useEffect(() => { const el = playerRef.current; if (!el) return; el.playbackRate = playbackRate; }, [playbackRate, audioUrl]);
-  useEffect(() => {
-    try { localStorage.setItem("vp_playbackRate", String(playbackRate)); } catch {}
-  }, [playbackRate]);
-  useEffect(() => {
-    try { localStorage.setItem("vp_repeatMode", repeatMode); } catch {}
-  }, [repeatMode]);
+  useEffect(() => { try { localStorage.setItem("vp_playbackRate", String(playbackRate)); } catch {} }, [playbackRate]);
+  useEffect(() => { try { localStorage.setItem("vp_repeatMode", repeatMode); } catch {} }, [repeatMode]);
   useEffect(() => {
     if (!error || !error.includes("لغو")) return;
     const t = setTimeout(() => setError(null), 3500);
@@ -958,6 +960,7 @@ function Index() {
                   <Upload className="size-4 shrink-0" /> آپلود صوت یا ویدیو
                   <input type="file" accept="audio/*,video/*,.m4a,.mp3,.wav,.ogg,.webm,.mp4,.mov,.mkv,.avi" className="hidden" disabled={loading} onChange={(e) => onFile(e.target.files?.[0])} />
                 </label>
+                
               </div>
             </div>
           </div>
@@ -1037,68 +1040,51 @@ function Index() {
             </summary>
             <div className="border-t border-border px-3 pb-5 pt-4 sm:px-6">
               <audio
-                key={audioUrl}
                 ref={playerRef}
                 src={audioUrl}
                 preload="auto"
                 onLoadedMetadata={(e) => {
                   const el = e.currentTarget;
                   const dur = Number.isFinite(el.duration) ? el.duration : 0;
-                  if (dur > 0) setDuration(dur);
+                  setDuration(dur > 0 ? dur : 0);
+                  // optional resume seek (only when NOT auto-playing from playlist)
+                  const seek = pendingSeekRef.current;
+                  pendingSeekRef.current = null;
+                  if (
+                    seek != null &&
+                    !pendingPlayRef.current &&
+                    dur > 0 &&
+                    seek > 0 &&
+                    seek < dur - 0.5
+                  ) {
+                    try {
+                      el.currentTime = seek;
+                      setCurrentTime(seek);
+                    } catch { /* ignore */ }
+                  }
                 }}
                 onCanPlay={(e) => {
-                  // Only handle the *first* canplay for this load generation
-                  if (!pendingPlayRef.current && pendingSeekRef.current == null) return;
-                  const el = e.currentTarget;
+                  // one-shot auto-play after playlist click
+                  if (!pendingPlayRef.current) return;
                   const gen = loadGenRef.current;
-
-                  const dur = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 0;
-                  if (dur > 0) setDuration(dur);
-
-                  const wantPlay = pendingPlayRef.current;
-                  const seek = pendingSeekRef.current;
-                  // consume flags immediately so repeated canplay events do nothing
                   pendingPlayRef.current = false;
-                  pendingSeekRef.current = null;
+                  const el = e.currentTarget;
                   stopAtRef.current = null;
                   playOnlyRef.current = false;
                   repeatIdxRef.current = null;
                   repeatDoneRef.current = 0;
-
-                  const startAt = 0; // playlist open always from start (stable)
-                  try {
-                    if (el.currentTime !== startAt) el.currentTime = startAt;
-                  } catch { /* ignore */ }
-                  setCurrentTime(startAt);
-
-                  if (!wantPlay) return;
-
-                  const tryPlay = () => {
-                    if (loadGenRef.current !== gen) return; // stale load
-                    void el.play().catch(() => setPlaying(false));
-                  };
-
-                  // If a non-zero seek were needed, wait for seeked; for 0 just play.
-                  if (startAt > 0.01) {
-                    const onSeeked = () => {
-                      el.removeEventListener("seeked", onSeeked);
-                      tryPlay();
-                    };
-                    el.addEventListener("seeked", onSeeked);
-                    // fallback if seeked never fires
-                    window.setTimeout(() => {
-                      el.removeEventListener("seeked", onSeeked);
-                      tryPlay();
-                    }, 400);
-                  } else {
-                    tryPlay();
-                  }
+                  try { el.currentTime = 0; } catch { /* ignore */ }
+                  setCurrentTime(0);
+                  try { el.playbackRate = playbackRate; } catch { /* ignore */ }
+                  // ignore if a newer source was loaded in the meantime
+                  if (loadGenRef.current !== gen) return;
+                  void el.play().catch(() => setPlaying(false));
                 }}
                 onTimeUpdate={(e) => {
                   const el = e.currentTarget;
                   const t = el.currentTime || 0;
                   const stopAt = stopAtRef.current;
-                  if (stopAt != null && t >= stopAt - 0.05) {
+                  if (stopAt != null && t >= stopAt - 0.02) {
                     stopAtRef.current = null;
                     if (playOnlyRef.current) {
                       playOnlyRef.current = false;
@@ -1146,8 +1132,8 @@ function Index() {
                   const id = currentItemIdRef.current;
                   if (id) {
                     const t = e.currentTarget.currentTime || 0;
-                    const dur = e.currentTarget.duration || duration || 0;
-                    const saveT = (dur > 0 && t >= dur - 0.75) ? 0 : t;
+                    const dur = e.currentTarget.duration || 0;
+                    const saveT = dur > 0 && t >= dur - 0.5 ? 0 : t;
                     lastSavedTimeRef.current = saveT;
                     void updateLibraryItem(id, { lastTime: saveT });
                   }
@@ -1162,8 +1148,6 @@ function Index() {
                     lastSavedTimeRef.current = 0;
                     void updateLibraryItem(id, { lastTime: 0 });
                   }
-                  setCurrentTime(0);
-                  // do NOT set el.currentTime here — that can re-trigger media events and hang
                 }}
                 className="hidden"
               />
