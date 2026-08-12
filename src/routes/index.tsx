@@ -993,6 +993,7 @@ function Index() {
                     return;
                   }
                   setCurrentTime(el.currentTime || 0);
+                  rememberProgress(el.currentTime || 0);
                 }}
 
                 onPlay={() => setPlaying(true)}
