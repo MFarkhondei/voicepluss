@@ -355,6 +355,9 @@ function Index() {
 
   useEffect(() => () => { if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current); }, []);
 
+  const cancelJob = useCallback(() => { abortRef.current?.abort(); abortRef.current = null; }, []);
+  const clearAnalysis = useCallback(() => { setAnalysis(null); setAnalysisMode(null); setAnalysisError(null); }, []);
+
   // ————— پلی‌لیست: فایل‌های اجراشدهٔ قبلی از حافظهٔ مرورگر —————
   const refreshLibrary = useCallback(async () => {
     setLibrary(await listLibrary());
@@ -497,8 +500,6 @@ function Index() {
     return () => { cancelAnimationFrame(raf); ro.disconnect(); };
   }, [segments.length, audioUrl, recording, pendingFile, isDesktop]);
 
-  const cancelJob = useCallback(() => { abortRef.current?.abort(); abortRef.current = null; }, []);
-  const clearAnalysis = useCallback(() => { setAnalysis(null); setAnalysisMode(null); setAnalysisError(null); }, []);
   const rebuildTextFromSegments = useCallback((list: Segment[]) => list.map((s) => s.text.trim()).filter(Boolean).join(" ").trim(), []);
   const updateSegmentText = useCallback((index: number, value: string) => {
     setSegments((prev) => {
