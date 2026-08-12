@@ -929,6 +929,72 @@ function Index() {
           </div>
         </details>
 
+        {library.length > 0 && (
+          <details open className="panel group overflow-hidden">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-4 sm:px-6">
+              <span className="flex min-w-0 items-center gap-2 text-sm font-bold">
+                <ListMusic className="size-4 shrink-0 text-muted-foreground" />
+                پلی‌لیست — فایل‌های اخیر ({library.length})
+              </span>
+              <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="border-t border-border px-2 pb-4 pt-3 sm:px-3">
+              <ul className="max-h-64 space-y-1 overflow-y-auto">
+                {library.map((item) => {
+                  const active = item.id === currentItemId;
+                  return (
+                    <li key={item.id}>
+                      <div
+                        className={`flex items-center gap-2 rounded-xl border px-2 py-2 transition-colors ${
+                          active ? "border-primary/40 bg-primary/10" : "border-transparent hover:bg-secondary"
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => void openLibraryItem(item.id)}
+                          disabled={loading || loadingItemId === item.id}
+                          className="flex min-w-0 flex-1 items-center gap-2 text-start disabled:opacity-60"
+                          title="بارگذاری این فایل و متن آن"
+                        >
+                          {loadingItemId === item.id ? (
+                            <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
+                          ) : (
+                            <Play className="size-4 shrink-0 text-primary" />
+                          )}
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium">{item.name}</span>
+                            <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+                              <span>{formatLibraryDate(item.updatedAt)}</span>
+                              {item.segments.length > 0 && <span>{item.segments.length} بخش متن</span>}
+                              {item.lastTime > 1 && (
+                                <span className="inline-flex items-center gap-1">
+                                  <Clock className="size-3" /> ادامه از {formatTime(item.lastTime)}
+                                </span>
+                              )}
+                            </span>
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void removeLibraryItem(item.id)}
+                          className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                          aria-label={`حذف ${item.name} از پلی‌لیست`}
+                          title="حذف از حافظه"
+                        >
+                          <X className="size-4" />
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+              <p className="mt-2 px-1 text-[11px] text-muted-foreground">
+                فایل‌ها و متن‌ها فقط روی همین دستگاه ذخیره می‌شوند (۲۰ مورد آخر).
+              </p>
+            </div>
+          </details>
+        )}
+
         {audioUrl && (
           <details open className="panel group overflow-hidden">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-4 sm:px-6">
