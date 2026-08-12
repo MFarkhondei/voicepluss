@@ -429,15 +429,23 @@ function Index() {
       setFileName(item.name);
       setSegments(item.segments);
       setText(item.text);
-      // Always start from the beginning on playlist click (stable).
-      // Seeking to lastTime was the main cause of jump-to-end.
-      pendingSeekRef.current = null;
-      lastSavedTimeRef.current = 0;
+      // Resume from lastTime when safe; otherwise start from 0.
+      // Never resume into the last ~1s (that looked like an instant jump to EOF).
+      let resume = 0;
+      const lt = Number(item.lastTime) || 0;
+      const knownDur = item.duration && item.duration > 0 ? item.duration : null;
+      if (lt > 1) {
+        if (knownDur != null && (lt >= knownDur - 1 || lt / knownDur > 0.98)) {
+          resume = 0;
+        } else {
+          resume = lt;
+        }
+      }
+      pendingSeekRef.current = resume > 0 ? resume : null;
+      lastSavedTimeRef.current = resume;
       pendingPlayRef.current = true;
-      // skipPeaks: avoid concurrent decodeAudioData while HTMLAudioElement starts —
-      // that combo can make some browsers seek erratically / hang.
+      // skipPeaks: avoid concurrent decodeAudioData while HTMLAudioElement starts
       setSourceFromBlob(item.blob, { skipPeaks: true });
-      // load waveform after a short delay so playback can start cleanly
       window.setTimeout(() => loadPeaksFromBlob(item.blob), 600);
     } finally {
       setLoadingItemId(null);
@@ -1047,16 +1055,12 @@ function Index() {
                   const el = e.currentTarget;
                   const dur = Number.isFinite(el.duration) ? el.duration : 0;
                   setDuration(dur > 0 ? dur : 0);
-                  // optional resume seek (only when NOT auto-playing from playlist)
+                  // When auto-playing from playlist, onCanPlay owns the seek.
+                  // Only apply resume here for silent load (no pending play).
+                  if (pendingPlayRef.current) return;
                   const seek = pendingSeekRef.current;
                   pendingSeekRef.current = null;
-                  if (
-                    seek != null &&
-                    !pendingPlayRef.current &&
-                    dur > 0 &&
-                    seek > 0 &&
-                    seek < dur - 0.5
-                  ) {
+                  if (seek != null && dur > 0 && seek > 0 && seek < dur - 0.5) {
                     try {
                       el.currentTime = seek;
                       setCurrentTime(seek);
@@ -1064,7 +1068,7 @@ function Index() {
                   }
                 }}
                 onCanPlay={(e) => {
-                  // one-shot auto-play after playlist click
+                  // one-shot auto-play after playlist click (optionally resume)
                   if (!pendingPlayRef.current) return;
                   const gen = loadGenRef.current;
                   pendingPlayRef.current = false;
@@ -1073,12 +1077,56 @@ function Index() {
                   playOnlyRef.current = false;
                   repeatIdxRef.current = null;
                   repeatDoneRef.current = 0;
-                  try { el.currentTime = 0; } catch { /* ignore */ }
-                  setCurrentTime(0);
+
+                  const dur = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 0;
+                  if (dur > 0) setDuration(dur);
+
+                  // resolve resume position safely against real duration
+                  let startAt = 0;
+                  const seek = pendingSeekRef.current;
+                  pendingSeekRef.current = null;
+                  if (seek != null && seek > 0) {
+                    if (dur > 0) {
+                      startAt = Math.min(seek, Math.max(0, dur - 1));
+                      if (startAt >= dur - 0.5) startAt = 0;
+                    } else {
+                      startAt = seek;
+                    }
+                  }
+
                   try { el.playbackRate = playbackRate; } catch { /* ignore */ }
-                  // ignore if a newer source was loaded in the meantime
-                  if (loadGenRef.current !== gen) return;
-                  void el.play().catch(() => setPlaying(false));
+
+                  const doPlay = () => {
+                    if (loadGenRef.current !== gen) return;
+                    void el.play().catch(() => setPlaying(false));
+                  };
+
+                  if (startAt > 0.05) {
+                    const onSeeked = () => {
+                      el.removeEventListener("seeked", onSeeked);
+                      setCurrentTime(el.currentTime || startAt);
+                      doPlay();
+                    };
+                    el.addEventListener("seeked", onSeeked);
+                    try {
+                      el.currentTime = startAt;
+                      setCurrentTime(startAt);
+                    } catch {
+                      el.removeEventListener("seeked", onSeeked);
+                      setCurrentTime(0);
+                      doPlay();
+                      return;
+                    }
+                    // fallback if seeked never fires
+                    window.setTimeout(() => {
+                      el.removeEventListener("seeked", onSeeked);
+                      doPlay();
+                    }, 500);
+                  } else {
+                    try { el.currentTime = 0; } catch { /* ignore */ }
+                    setCurrentTime(0);
+                    doPlay();
+                  }
                 }}
                 onTimeUpdate={(e) => {
                   const el = e.currentTarget;
