@@ -288,8 +288,21 @@ function Index() {
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [playbackRate, setPlaybackRate] = useState(1);
-  const [repeatMode, setRepeatMode] = useState<"off" | "inf" | "1" | "2" | "3" | "4" | "5">("off");
+  const [playbackRate, setPlaybackRate] = useState(() => {
+    try {
+      const v = Number(localStorage.getItem("vp_playbackRate"));
+      return PLAYBACK_RATES.includes(v) ? v : 1;
+    } catch {
+      return 1;
+    }
+  });
+  const [repeatMode, setRepeatMode] = useState<"off" | "inf" | "1" | "2" | "3" | "4" | "5">(() => {
+    try {
+      const v = localStorage.getItem("vp_repeatMode");
+      if (v === "off" || v === "inf" || v === "1" || v === "2" || v === "3" || v === "4" || v === "5") return v;
+    } catch {}
+    return "off";
+  });
 
   const [peaks, setPeaks] = useState<number[]>([]);
   const [peaksLoading, setPeaksLoading] = useState(false);
@@ -322,6 +335,7 @@ function Index() {
   const peakJobRef = useRef(0);
   const currentItemIdRef = useRef<string | null>(null);
   const pendingSeekRef = useRef<number | null>(null);
+  const pendingPlayRef = useRef(false);
   const lastSavedTimeRef = useRef(0);
 
   const setSourceFromBlob = useCallback((blob: Blob, opts?: { skipPeaks?: boolean }) => {
@@ -332,7 +346,11 @@ function Index() {
     setPlaying(false);
     setCurrentTime(0);
     setDuration(0);
-    setPlaybackRate(1);
+    // keep last playbackRate / repeatMode; clear segment-play state so playlist load doesn't jump
+    stopAtRef.current = null;
+    playOnlyRef.current = false;
+    repeatIdxRef.current = null;
+    repeatDoneRef.current = 0;
     const job = ++peakJobRef.current;
     setPeaks([]);
     if (opts?.skipPeaks) {
@@ -403,8 +421,12 @@ function Index() {
       setFileName(item.name);
       setSegments(item.segments);
       setText(item.text);
-      pendingSeekRef.current = item.lastTime > 1 ? item.lastTime : null;
-      lastSavedTimeRef.current = item.lastTime;
+      // resume near last position but leave a small buffer so we don't land at EOF
+      const resume = item.lastTime > 1 ? item.lastTime : 0;
+      pendingSeekRef.current = resume;
+      lastSavedTimeRef.current = resume;
+      // signal auto-play after metadata loads
+      pendingPlayRef.current = true;
       setSourceFromBlob(item.blob);
     } finally {
       setLoadingItemId(null);
@@ -451,6 +473,12 @@ function Index() {
     return () => mq.removeEventListener("change", apply);
   }, []);
   useEffect(() => { const el = playerRef.current; if (!el) return; el.playbackRate = playbackRate; }, [playbackRate, audioUrl]);
+  useEffect(() => {
+    try { localStorage.setItem("vp_playbackRate", String(playbackRate)); } catch {}
+  }, [playbackRate]);
+  useEffect(() => {
+    try { localStorage.setItem("vp_repeatMode", repeatMode); } catch {}
+  }, [repeatMode]);
   useEffect(() => {
     if (!error || !error.includes("لغو")) return;
     const t = setTimeout(() => setError(null), 3500);
@@ -794,6 +822,7 @@ function Index() {
     setCurrentItemId(null);
     lastSavedTimeRef.current = 0;
     pendingSeekRef.current = null;
+    pendingPlayRef.current = false;
     setFileName(file.name);
     setSourceFromBlob(file);
     setPendingFile(file);
@@ -919,17 +948,11 @@ function Index() {
                 {recording ? <Square className="size-8" /> : <Mic className="size-9" />}
               </button>
               <p className="text-sm text-muted-foreground">{recording ? `در حال ضبط… ${formatTime(elapsed)}` : "برای شروع ضبط کلیک کنید"}</p>
-              <div className="flex w-full min-w-0 flex-col items-center gap-4 border-t border-border pt-5 sm:flex-row sm:justify-between">
+              <div className="flex w-full min-w-0 flex-col items-center gap-4 border-t border-border pt-5 sm:flex-row sm:justify-center">
                 <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2.5 text-sm font-medium text-surface-foreground transition-colors hover:bg-secondary sm:px-4">
                   <Upload className="size-4 shrink-0" /> آپلود صوت یا ویدیو
                   <input type="file" accept="audio/*,video/*,.m4a,.mp3,.wav,.ogg,.webm,.mp4,.mov,.mkv,.avi" className="hidden" disabled={loading} onChange={(e) => onFile(e.target.files?.[0])} />
                 </label>
-                <div className="flex min-w-0 items-center gap-2 text-sm">
-                  <span className="shrink-0 text-muted-foreground">زبان خروجی:</span>
-                  <select value={language} onChange={(e) => setLanguage(e.target.value as OutputLanguage)} disabled={loading} className="max-w-[min(100%,8rem)] rounded-xl border border-border bg-card px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-ring sm:px-3" title="زبان متن خروجی">
-                    {LANGUAGES.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
-                  </select>
-                </div>
               </div>
             </div>
           </div>
@@ -1014,12 +1037,22 @@ function Index() {
                 preload="metadata"
                 onLoadedMetadata={(e) => {
                   const el = e.currentTarget;
-                  setDuration(el.duration || 0);
+                  const dur = el.duration || 0;
+                  setDuration(dur);
                   const seek = pendingSeekRef.current;
                   pendingSeekRef.current = null;
-                  if (seek != null && Number.isFinite(el.duration) && seek < el.duration) {
-                    el.currentTime = seek;
-                    setCurrentTime(seek);
+                  // avoid landing on the very end (which can make it look like playback jumped to EOF)
+                  let t = 0;
+                  if (seek != null && Number.isFinite(dur) && dur > 0) {
+                    t = Math.max(0, Math.min(seek, Math.max(0, dur - 0.25)));
+                    el.currentTime = t;
+                    setCurrentTime(t);
+                  }
+                  if (pendingPlayRef.current) {
+                    pendingPlayRef.current = false;
+                    stopAtRef.current = null;
+                    playOnlyRef.current = false;
+                    void el.play().catch(() => setPlaying(false));
                   }
                 }}
                 onTimeUpdate={(e) => {
@@ -1151,6 +1184,14 @@ function Index() {
             <button type="button" onClick={startTranscription} className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90">
               <Sparkles className="size-4" /> شروع خروجی متن
             </button>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+            <span className="shrink-0 text-muted-foreground">زبان خروجی:</span>
+            <select value={language} onChange={(e) => setLanguage(e.target.value as OutputLanguage)} disabled={loading} className="max-w-[min(100%,8rem)] rounded-xl border border-border bg-card px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-ring sm:px-3" title="زبان متن خروجی">
+              {LANGUAGES.map((l) => (
+                <option key={l.id} value={l.id}>{l.label}</option>
+              ))}
+            </select>
           </div>
         </section>
       )}
