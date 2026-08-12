@@ -646,6 +646,7 @@ function Index() {
     setSegmentQuery("");
     setOnlyLowConfidence(false);
     setFileName(name);
+    void rememberFile(blob, name);
     setProgressLabel(null);
     setProgressPct(0);
     textLockHRef.current = null;
