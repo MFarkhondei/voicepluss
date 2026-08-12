@@ -421,11 +421,21 @@ function Index() {
       setFileName(item.name);
       setSegments(item.segments);
       setText(item.text);
-      // resume near last position but leave a small buffer so we don't land at EOF
-      const resume = item.lastTime > 1 ? item.lastTime : 0;
+      // If last position is near the end (or file was fully played), start from beginning.
+      // Otherwise resume a bit before lastTime so playback is audible.
+      let resume = 0;
+      const lt = item.lastTime || 0;
+      const knownDur = item.duration && item.duration > 0 ? item.duration : null;
+      if (lt > 1) {
+        if (knownDur != null && (lt >= knownDur - 2 || lt / knownDur > 0.97)) {
+          resume = 0;
+        } else {
+          resume = Math.max(0, lt - 0.15);
+        }
+      }
       pendingSeekRef.current = resume;
       lastSavedTimeRef.current = resume;
-      // signal auto-play after metadata loads
+      // auto-play after media is ready (canplay is more reliable than metadata alone)
       pendingPlayRef.current = true;
       setSourceFromBlob(item.blob);
     } finally {
@@ -443,9 +453,12 @@ function Index() {
     const id = currentItemIdRef.current;
     if (!id) return;
     if (Math.abs(time - lastSavedTimeRef.current) < 4) return;
-    lastSavedTimeRef.current = time;
-    void updateLibraryItem(id, { lastTime: time });
-  }, []);
+    const el = playerRef.current;
+    const dur = el?.duration || duration || 0;
+    const saveT = (dur > 0 && time >= dur - 0.75) ? 0 : time;
+    lastSavedTimeRef.current = saveT;
+    void updateLibraryItem(id, { lastTime: saveT });
+  }, [duration]);
 
 
   // تست کوتاه سرویس Groq هنگام باز شدن برنامه
@@ -1037,22 +1050,42 @@ function Index() {
                 preload="metadata"
                 onLoadedMetadata={(e) => {
                   const el = e.currentTarget;
-                  const dur = el.duration || 0;
-                  setDuration(dur);
+                  const dur = Number.isFinite(el.duration) ? el.duration : 0;
+                  setDuration(dur || 0);
+                }}
+                onCanPlay={(e) => {
+                  const el = e.currentTarget;
+                  const dur = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 0;
+                  if (dur > 0) setDuration(dur);
+
                   const seek = pendingSeekRef.current;
-                  pendingSeekRef.current = null;
-                  // avoid landing on the very end (which can make it look like playback jumped to EOF)
-                  let t = 0;
-                  if (seek != null && Number.isFinite(dur) && dur > 0) {
-                    t = Math.max(0, Math.min(seek, Math.max(0, dur - 0.25)));
-                    el.currentTime = t;
+                  if (seek != null) {
+                    pendingSeekRef.current = null;
+                    let t = 0;
+                    if (dur > 0) {
+                      // never land in the last 0.5s — that looks like an instant jump to EOF
+                      t = Math.max(0, Math.min(seek, Math.max(0, dur - 0.5)));
+                    } else {
+                      t = Math.max(0, seek);
+                    }
+                    try {
+                      el.currentTime = t;
+                    } catch {
+                      t = 0;
+                      try { el.currentTime = 0; } catch { /* ignore */ }
+                    }
                     setCurrentTime(t);
                   }
+
                   if (pendingPlayRef.current) {
                     pendingPlayRef.current = false;
                     stopAtRef.current = null;
                     playOnlyRef.current = false;
-                    void el.play().catch(() => setPlaying(false));
+                    repeatIdxRef.current = null;
+                    // slight delay helps some browsers finish seeking before play
+                    requestAnimationFrame(() => {
+                      void el.play().catch(() => setPlaying(false));
+                    });
                   }
                 }}
                 onTimeUpdate={(e) => {
@@ -1106,11 +1139,27 @@ function Index() {
                   setPlaying(false);
                   const id = currentItemIdRef.current;
                   if (id) {
-                    lastSavedTimeRef.current = e.currentTarget.currentTime || 0;
-                    void updateLibraryItem(id, { lastTime: e.currentTarget.currentTime || 0 });
+                    const t = e.currentTarget.currentTime || 0;
+                    const dur = e.currentTarget.duration || duration || 0;
+                    // if paused at/near the end, store 0 so next open starts from the beginning
+                    const saveT = (dur > 0 && t >= dur - 0.75) ? 0 : t;
+                    lastSavedTimeRef.current = saveT;
+                    void updateLibraryItem(id, { lastTime: saveT });
                   }
                 }}
-                onEnded={() => setPlaying(false)}
+                onEnded={(e) => {
+                  setPlaying(false);
+                  const id = currentItemIdRef.current;
+                  if (id) {
+                    lastSavedTimeRef.current = 0;
+                    void updateLibraryItem(id, { lastTime: 0 });
+                  }
+                  // ensure UI shows start for next play
+                  try {
+                    e.currentTarget.currentTime = 0;
+                    setCurrentTime(0);
+                  } catch { /* ignore */ }
+                }}
                 className="hidden"
               />
               <div className="mb-3 flex flex-wrap items-center justify-end gap-2 text-sm">
