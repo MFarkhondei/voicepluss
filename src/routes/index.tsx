@@ -997,7 +997,14 @@ function Index() {
                 }}
 
                 onPlay={() => setPlaying(true)}
-                onPause={() => setPlaying(false)}
+                onPause={(e) => {
+                  setPlaying(false);
+                  const id = currentItemIdRef.current;
+                  if (id) {
+                    lastSavedTimeRef.current = e.currentTarget.currentTime || 0;
+                    void updateLibraryItem(id, { lastTime: e.currentTarget.currentTime || 0 });
+                  }
+                }}
                 onEnded={() => setPlaying(false)}
                 className="hidden"
               />
