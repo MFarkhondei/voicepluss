@@ -288,8 +288,21 @@ function Index() {
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [playbackRate, setPlaybackRate] = useState(1);
-  const [repeatMode, setRepeatMode] = useState<"off" | "inf" | "1" | "2" | "3" | "4" | "5">("off");
+  const [playbackRate, setPlaybackRate] = useState(() => {
+    try {
+      const v = Number(localStorage.getItem("vp_playbackRate"));
+      return PLAYBACK_RATES.includes(v) ? v : 1;
+    } catch {
+      return 1;
+    }
+  });
+  const [repeatMode, setRepeatMode] = useState<"off" | "inf" | "1" | "2" | "3" | "4" | "5">(() => {
+    try {
+      const v = localStorage.getItem("vp_repeatMode");
+      if (v === "off" || v === "inf" || ["1","2","3","4","5"].includes(v)) return v as any;
+    } catch {}
+    return "off";
+  });
 
   const [peaks, setPeaks] = useState<number[]>([]);
   const [peaksLoading, setPeaksLoading] = useState(false);
@@ -326,19 +339,9 @@ function Index() {
   const loadGenRef = useRef(0);
   const seekCleanupRef = useRef<(() => void) | null>(null);
   const lastSavedTimeRef = useRef(0);
-  const mediaReadyRef = useRef(false);
 
   const setSourceFromBlob = useCallback((blob: Blob, opts?: { skipPeaks?: boolean; initialDuration?: number | null }) => {
-    const previousUrl = audioUrlRef.current;
-    const currentPlayer = playerRef.current;
-    if (currentPlayer) {
-      currentPlayer.pause();
-      currentPlayer.removeAttribute("src");
-      // Firefox can keep the old Blob resource alive until load() explicitly
-      // detaches it. Revoking first may poison the next source on the same element.
-      currentPlayer.load();
-    }
-    if (previousUrl) URL.revokeObjectURL(previousUrl);
+    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
     // Generic "audio/*" is not a valid media type for HTMLAudioElement in some browsers
     let srcBlob = blob;
     if ((blob.type || "").trim() === "audio/*") {
@@ -349,7 +352,6 @@ function Index() {
     loadGenRef.current += 1;
     setAudioUrl(url);
     setPlaying(false);
-    mediaReadyRef.current = false;
     setCurrentTime(0);
     // Recordings (MediaRecorder webm blobs) often report duration as Infinity/NaN
     // until the browser finishes indexing them, which leaves the slider's max at 0
@@ -372,7 +374,15 @@ function Index() {
     }
     setPeaksLoading(true);
     void extractPeaks(blob, 160)
-      .then((p) => { if (peakJobRef.current === job) setPeaks(p); })
+      .then(({ peaks, duration: decodedDur }) => {
+        if (peakJobRef.current !== job) return;
+        setPeaks(peaks);
+        // decodeAudioData gives an exact duration without ever touching the
+        // playback element's currentTime (safe across browsers, incl. Firefox).
+        // Only use it to fill in what's still unknown — never override a value
+        // the <audio> element itself has already reported.
+        if (decodedDur > 0) setDuration((d) => (d > 0 ? d : decodedDur));
+      })
       .finally(() => { if (peakJobRef.current === job) setPeaksLoading(false); });
   }, []);
 
@@ -380,7 +390,11 @@ function Index() {
     const job = ++peakJobRef.current;
     setPeaksLoading(true);
     void extractPeaks(blob, 160)
-      .then((p) => { if (peakJobRef.current === job) setPeaks(p); })
+      .then(({ peaks, duration: decodedDur }) => {
+        if (peakJobRef.current !== job) return;
+        setPeaks(peaks);
+        if (decodedDur > 0) setDuration((d) => (d > 0 ? d : decodedDur));
+      })
       .finally(() => { if (peakJobRef.current === job) setPeaksLoading(false); });
   }, []);
 
@@ -419,12 +433,8 @@ function Index() {
   }, [refreshLibrary]);
 
   const openLibraryItem = useCallback(async (id: string) => {
-    // Do not try to "unlock" the existing element before IndexedDB returns. In
-    // Firefox that old play promise can settle after the new source is installed
-    // and pause/abort the newly loaded file.
     setLoadingItemId(id);
     try {
-
       const item = await getLibraryItem(id);
       if (!item) { await refreshLibrary(); return; }
       cancelJob();
@@ -452,10 +462,7 @@ function Index() {
       }
       pendingSeekRef.current = resume > 0 ? resume : null;
       lastSavedTimeRef.current = resume;
-      // Loading a Blob from IndexedDB is asynchronous, so Firefox no longer treats
-      // a later play() as part of this click. Load and restore the position here;
-      // the visible play button then starts it reliably with a fresh user gesture.
-      pendingPlayRef.current = false;
+      pendingPlayRef.current = true;
       // skipPeaks: avoid concurrent decodeAudioData while HTMLAudioElement starts
       setSourceFromBlob(item.blob, { skipPeaks: true, initialDuration: knownDur });
       window.setTimeout(() => loadPeaksFromBlob(item.blob), 600);
@@ -502,16 +509,6 @@ function Index() {
     apply();
     mq.addEventListener("change", apply);
     return () => mq.removeEventListener("change", apply);
-  }, []);
-  useEffect(() => {
-    try {
-      const savedRate = Number(localStorage.getItem("vp_playbackRate"));
-      if (PLAYBACK_RATES.includes(savedRate)) setPlaybackRate(savedRate);
-      const savedRepeat = localStorage.getItem("vp_repeatMode");
-      if (savedRepeat && (savedRepeat === "off" || savedRepeat === "inf" || ["1", "2", "3", "4", "5"].includes(savedRepeat))) {
-        setRepeatMode(savedRepeat as typeof repeatMode);
-      }
-    } catch { /* browser storage is optional */ }
   }, []);
   useEffect(() => { const el = playerRef.current; if (!el) return; el.playbackRate = playbackRate; }, [playbackRate, audioUrl]);
   useEffect(() => { try { localStorage.setItem("vp_playbackRate", String(playbackRate)); } catch {} }, [playbackRate]);
@@ -622,20 +619,7 @@ function Index() {
         stopAtRef.current = null;
         repeatIdxRef.current = null;
       }
-      const start = () => {
-        void el.play().catch(() => {
-          setPlaying(false);
-          setError("مرورگر نتوانست صوت را پخش کند؛ دوباره روی پخش بزنید.");
-        });
-      };
-      if (mediaReadyRef.current || el.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-        start();
-      } else {
-        const onReady = () => start();
-        el.addEventListener("canplay", onReady, { once: true });
-        // Explicit load is important for Firefox Blob URLs restored from IndexedDB.
-        el.load();
-      }
+      void el.play().catch(() => setPlaying(false));
     } else el.pause();
   }, [audioUrl, repeatMode, activeSegmentIndex, segments]);
   const pauseForEdit = useCallback(() => {
@@ -667,39 +651,15 @@ function Index() {
     return d1 || d2 || 0;
   }, [duration]);
 
-  const setMediaTime = useCallback((el: HTMLAudioElement, next: number) => {
-    // Firefox may ignore currentTime assignments made before Blob metadata is
-    // available. Keep the requested time and apply it from loadedmetadata.
-    if (el.readyState < HTMLMediaElement.HAVE_METADATA) {
-      pendingSeekRef.current = next;
-      el.load();
-      return;
-    }
-    try {
-      el.currentTime = next;
-    } catch {
-      pendingSeekRef.current = next;
-      el.load();
-    }
-  }, []);
-
-  const playAfterUserSeek = useCallback((el: HTMLAudioElement) => {
-    // Waveform/range/skip interactions are explicit user gestures. Starting here
-    // (rather than from a later media event) satisfies Firefox autoplay policy.
-    if (el.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
-    void el.play().catch(() => setPlaying(false));
-  }, []);
-
   const skip = useCallback((delta: number) => {
     const el = playerRef.current;
     if (!el) return;
     clearMediaControlState();
     const total = safeDuration(el);
     const next = Math.max(0, Math.min(total, (el.currentTime || 0) + delta));
-    setMediaTime(el, next);
+    try { el.currentTime = next; } catch { /* ignore */ }
     setCurrentTime(next);
-    playAfterUserSeek(el);
-  }, [clearMediaControlState, safeDuration, setMediaTime, playAfterUserSeek]);
+  }, [clearMediaControlState, safeDuration]);
 
   const seekTo = useCallback((time: number) => {
     const el = playerRef.current;
@@ -708,10 +668,9 @@ function Index() {
     const total = safeDuration(el);
     const t = Number(time);
     const next = Math.max(0, Math.min(total, Number.isFinite(t) ? t : 0));
-    setMediaTime(el, next);
+    try { el.currentTime = next; } catch { /* ignore */ }
     setCurrentTime(next);
-    playAfterUserSeek(el);
-  }, [clearMediaControlState, safeDuration, setMediaTime, playAfterUserSeek]);
+  }, [clearMediaControlState, safeDuration]);
 
   const seekRatio = useCallback((ratio: number) => {
     const el = playerRef.current;
@@ -720,10 +679,9 @@ function Index() {
     const total = safeDuration(el);
     const r = Number.isFinite(ratio) ? Math.min(1, Math.max(0, ratio)) : 0;
     const next = Math.max(0, Math.min(total, r * total));
-    setMediaTime(el, next);
+    try { el.currentTime = next; } catch { /* ignore */ }
     setCurrentTime(next);
-    playAfterUserSeek(el);
-  }, [clearMediaControlState, safeDuration, setMediaTime, playAfterUserSeek]);
+  }, [clearMediaControlState, safeDuration]);
 
   const refineTranscript = useCallback(async () => {
     if (segments.length === 0 || refining) return;
@@ -1168,7 +1126,6 @@ function Index() {
                   }
                 }}
                 onCanPlay={(e) => {
-                  mediaReadyRef.current = true;
                   // one-shot auto-play after playlist click (optionally resume)
                   if (!pendingPlayRef.current) return;
                   const gen = loadGenRef.current;
@@ -1182,97 +1139,58 @@ function Index() {
                   const seek = pendingSeekRef.current;
                   pendingSeekRef.current = null;
 
-                  // Everything below needs the REAL duration to compute a safe resume
-                  // position and to fix the slider. Do this after duration is known.
-                  const proceed = (dur: number) => {
-                    if (loadGenRef.current !== gen) return;
-                    if (dur > 0) setDuration(dur);
-
-                    // resolve resume position safely against the real duration;
-                    // never resume into the last ~1s (that looked like an instant jump to EOF)
-                    let startAt = 0;
-                    if (seek != null && seek > 0) {
-                      startAt = dur > 0 && seek >= dur - 1 ? 0 : seek;
-                    }
-
-                    try { el.playbackRate = playbackRate; } catch { /* ignore */ }
-
-                    const doPlay = () => {
-                      if (loadGenRef.current !== gen) return;
-                      void el.play().catch(() => setPlaying(false));
-                    };
-
-                    if (startAt > 0.05) {
-                      let done = false;
-                      const finish = () => {
-                        if (done) return;
-                        done = true;
-                        if (seekCleanupRef.current) {
-                          seekCleanupRef.current();
-                          seekCleanupRef.current = null;
-                        }
-                        setCurrentTime(el.currentTime || startAt);
-                        doPlay();
-                      };
-                      const onSeeked = () => finish();
-                      el.addEventListener("seeked", onSeeked);
-                      const timer = window.setTimeout(finish, 500);
-                      seekCleanupRef.current = () => {
-                        el.removeEventListener("seeked", onSeeked);
-                        window.clearTimeout(timer);
-                      };
-                      try {
-                        el.currentTime = startAt;
-                        setCurrentTime(startAt);
-                      } catch {
-                        finish();
-                      }
-                    } else {
-                      try { el.currentTime = 0; } catch { /* ignore */ }
-                      setCurrentTime(0);
-                      doPlay();
-                    }
-                  };
-
+                  // Prefer the browser's own duration; fall back to whatever we already
+                  // seeded in state (saved library duration, or an earlier decodeAudioData
+                  // pass) — never force a seek on the element just to learn the duration,
+                  // since that misbehaves across browsers (breaks playback in Firefox).
                   const nativeDur = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 0;
-                  if (nativeDur > 0) {
-                    proceed(nativeDur);
-                    return;
+                  const dur = nativeDur > 0 ? nativeDur : (Number.isFinite(duration) && duration > 0 ? duration : 0);
+                  if (nativeDur > 0) setDuration(nativeDur);
+
+                  // resolve resume position safely against the real duration;
+                  // never resume into the last ~1s (that looked like an instant jump to EOF)
+                  let startAt = 0;
+                  if (seek != null && seek > 0) {
+                    startAt = dur > 0 && seek >= dur - 1 ? 0 : seek;
                   }
 
-                  // Duration unknown (Infinity/NaN/0) — common for recorded (MediaRecorder)
-                  // blobs whose container has no duration in its header. Force the browser
-                  // to compute the real value (seek far forward triggers indexing) BEFORE
-                  // resuming/playing, otherwise the resume position and the slider end up
-                  // wrong ("jumps to the end" when the slider is touched).
-                  let settled = false;
-                  const finishPriming = (dur: number) => {
-                    if (settled) return;
-                    settled = true;
-                    el.removeEventListener("durationchange", onDurationFixed);
-                    el.removeEventListener("timeupdate", onTimeUpdateOnce);
-                    window.clearTimeout(fallbackTimer);
-                    proceed(dur);
+                  try { el.playbackRate = playbackRate; } catch { /* ignore */ }
+
+                  const doPlay = () => {
+                    if (loadGenRef.current !== gen) return;
+                    void el.play().catch(() => setPlaying(false));
                   };
-                  const onDurationFixed = () => {
-                    if (Number.isFinite(el.duration) && el.duration > 0) finishPriming(el.duration);
-                  };
-                  const onTimeUpdateOnce = () => {
-                    const d = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : 0;
-                    finishPriming(d);
-                  };
-                  const fallbackTimer = window.setTimeout(() => finishPriming(0), 800);
-                  el.addEventListener("durationchange", onDurationFixed);
-                  el.addEventListener("timeupdate", onTimeUpdateOnce, { once: true });
-                  try { el.currentTime = 1e101; } catch { finishPriming(0); }
-                }}
-                onError={(e) => {
-                  mediaReadyRef.current = false;
-                  setPlaying(false);
-                  const code = e.currentTarget.error?.code;
-                  setError(code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED
-                    ? "فرمت این فایل صوتی در فایرفاکس پشتیبانی نمی‌شود."
-                    : "بارگذاری فایل صوتی با خطا روبه‌رو شد؛ دوباره آن را از پلی‌لیست باز کنید.");
+
+                  if (startAt > 0.05) {
+                    let done = false;
+                    const finish = () => {
+                      if (done) return;
+                      done = true;
+                      if (seekCleanupRef.current) {
+                        seekCleanupRef.current();
+                        seekCleanupRef.current = null;
+                      }
+                      setCurrentTime(el.currentTime || startAt);
+                      doPlay();
+                    };
+                    const onSeeked = () => finish();
+                    el.addEventListener("seeked", onSeeked);
+                    const timer = window.setTimeout(finish, 500);
+                    seekCleanupRef.current = () => {
+                      el.removeEventListener("seeked", onSeeked);
+                      window.clearTimeout(timer);
+                    };
+                    try {
+                      el.currentTime = startAt;
+                      setCurrentTime(startAt);
+                    } catch {
+                      finish();
+                    }
+                  } else {
+                    try { el.currentTime = 0; } catch { /* ignore */ }
+                    setCurrentTime(0);
+                    doPlay();
+                  }
                 }}
                 onTimeUpdate={(e) => {
                   const el = e.currentTarget;

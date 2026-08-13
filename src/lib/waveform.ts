@@ -1,13 +1,17 @@
 /** استخراج پیک‌های دامنهٔ صوت برای رسم waveform.
- * برای فایل‌های بزرگ دیکود کامل انجام نمی‌شود تا تب کروم کرش نکند. */
+ * برای فایل‌های بزرگ دیکود کامل انجام نمی‌شود تا تب کروم کرش نکند.
+ * دیکود واقعی (decodeAudioData) مدت زمان دقیق فایل را هم به‌دست می‌دهد —
+ * بدون نیاز به seek کردن روی خود عنصر <audio> پخش (که در فایرفاکس مشکل‌ساز است). */
 
 /** بالای این حجم: فقط الگوی تقریبی (بدون decodeAudioData) */
 const MAX_DECODE_BYTES = 6 * 1024 * 1024;
 
-export async function extractPeaks(blob: Blob, barCount = 120): Promise<number[]> {
+export type PeaksResult = { peaks: number[]; duration: number };
+
+export async function extractPeaks(blob: Blob, barCount = 120): Promise<PeaksResult> {
   // فایل بزرگ / ویدیو: دیکود دوباره = کرش حافظه (Aw, Snap!)
   if (blob.size > MAX_DECODE_BYTES) {
-    return fallbackPeaks(blob.size, barCount);
+    return { peaks: fallbackPeaks(blob.size, barCount), duration: 0 };
   }
 
   try {
@@ -18,7 +22,8 @@ export async function extractPeaks(blob: Blob, barCount = 120): Promise<number[]
       const decoded = await ctx.decodeAudioData(arrayBuffer);
       const channels = decoded.numberOfChannels;
       const length = decoded.length;
-      if (length === 0) return fallbackPeaks(blob.size, barCount);
+      const duration = Number.isFinite(decoded.duration) && decoded.duration > 0 ? decoded.duration : 0;
+      if (length === 0) return { peaks: fallbackPeaks(blob.size, barCount), duration };
 
       const bucketSize = Math.max(1, Math.floor(length / barCount));
       const rawPeaks: number[] = [];
@@ -39,12 +44,12 @@ export async function extractPeaks(blob: Blob, barCount = 120): Promise<number[]
       }
 
       const peakMax = Math.max(...rawPeaks, 0.0001);
-      return rawPeaks.map((p) => Math.min(1, p / peakMax));
+      return { peaks: rawPeaks.map((p) => Math.min(1, p / peakMax)), duration };
     } finally {
       void ctx.close();
     }
   } catch {
-    return fallbackPeaks(blob.size, barCount);
+    return { peaks: fallbackPeaks(blob.size, barCount), duration: 0 };
   }
 }
 
