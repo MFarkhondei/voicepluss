@@ -331,6 +331,15 @@ function Index() {
   const loadGenRef = useRef(0);
   const seekCleanupRef = useRef<(() => void) | null>(null);
   const lastSavedTimeRef = useRef(0);
+  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Loading spinner on a playlist row should stay on until playback actually
+  // starts (or clearly fails), not just until the source is attached.
+  const clearLoadingFor = useCallback((id: string | null) => {
+    if (loadingTimeoutRef.current) { clearTimeout(loadingTimeoutRef.current); loadingTimeoutRef.current = null; }
+    if (!id) { setLoadingItemId(null); return; }
+    setLoadingItemId((cur) => (cur === id ? null : cur));
+  }, []);
 
   const setSourceFromBlob = useCallback((blob: Blob, opts?: { initialDuration?: number | null }) => {
     if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
@@ -396,9 +405,10 @@ function Index() {
 
   const openLibraryItem = useCallback(async (id: string) => {
     setLoadingItemId(id);
+    if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
     try {
       const item = await getLibraryItem(id);
-      if (!item) { await refreshLibrary(); return; }
+      if (!item) { await refreshLibrary(); clearLoadingFor(id); return; }
       cancelJob();
       currentItemIdRef.current = id;
       setCurrentItemId(id);
@@ -427,10 +437,15 @@ function Index() {
       lastSavedTimeRef.current = resume;
       pendingPlayRef.current = true;
       setSourceFromBlob(item.blob, { initialDuration: knownDur });
-    } finally {
-      setLoadingItemId(null);
+      // Keep the spinner on this row until playback actually starts (onPlay),
+      // or clearly fails (onError / autoplay rejected). Safety net in case
+      // neither fires (e.g. a corrupt file the browser never reports on).
+      loadingTimeoutRef.current = setTimeout(() => clearLoadingFor(id), 15000);
+    } catch (err) {
+      clearLoadingFor(id);
+      setError(err instanceof Error ? err.message : "خطا در بارگذاری فایل.");
     }
-  }, [cancelJob, clearAnalysis, refreshLibrary, setSourceFromBlob]);
+  }, [cancelJob, clearAnalysis, clearLoadingFor, refreshLibrary, setSourceFromBlob]);
 
   const removeLibraryItem = useCallback(async (id: string) => {
     await deleteLibraryItem(id);
@@ -1260,7 +1275,12 @@ function Index() {
 
           const doPlay = () => {
             if (loadGenRef.current !== gen) return;
-            void el.play().catch(() => setPlaying(false));
+            void el.play().catch(() => {
+              setPlaying(false);
+              // Autoplay was rejected — stop showing the row as "loading"
+              // since nothing else will start playback for the user now.
+              clearLoadingFor(currentItemIdRef.current);
+            });
           };
 
           if (startAt > 0.05) {
@@ -1340,7 +1360,12 @@ function Index() {
           setCurrentTime(t);
           rememberProgress(t);
         }}
-        onPlay={() => setPlaying(true)}
+        onPlay={() => { setPlaying(true); clearLoadingFor(currentItemIdRef.current); }}
+        onError={() => {
+          setPlaying(false);
+          clearLoadingFor(currentItemIdRef.current);
+          setError("خطا در بارگذاری فایل صوتی.");
+        }}
         onPause={(e) => {
           setPlaying(false);
           const id = currentItemIdRef.current;
