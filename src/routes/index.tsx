@@ -299,7 +299,7 @@ function Index() {
   const [repeatMode, setRepeatMode] = useState<"off" | "inf" | "1" | "2" | "3" | "4" | "5">(() => {
     try {
       const v = localStorage.getItem("vp_repeatMode");
-      if (v === "off" || v === "inf" || ["1","2","3","4","5"].includes(v)) return v as any;
+      if (v && (v === "off" || v === "inf" || ["1", "2", "3", "4", "5"].includes(v))) return v as any;
     } catch {}
     return "off";
   });
@@ -421,8 +421,27 @@ function Index() {
   }, [refreshLibrary]);
 
   const openLibraryItem = useCallback(async (id: string) => {
+    // Firefox blocks play() that happens after async work (its autoplay policy needs
+    // the call to come from the user gesture). Unlock the element synchronously here,
+    // while the click is still being handled, so the later auto-play is allowed.
+    {
+      const el = playerRef.current;
+      if (el) {
+        try {
+          el.muted = true;
+          const p = el.play();
+          if (p && typeof p.then === "function") {
+            void p.then(() => { el.pause(); el.muted = false; }).catch(() => { el.muted = false; });
+          } else {
+            el.pause();
+            el.muted = false;
+          }
+        } catch { el.muted = false; }
+      }
+    }
     setLoadingItemId(id);
     try {
+
       const item = await getLibraryItem(id);
       if (!item) { await refreshLibrary(); return; }
       cancelJob();
