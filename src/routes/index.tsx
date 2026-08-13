@@ -1373,7 +1373,7 @@ function Index() {
   ];
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full min-w-0 max-w-md flex-col gap-3 px-2.5 py-6 sm:py-10">
+    <main className="mx-auto flex min-h-dvh w-full min-w-0 max-w-[1280px] flex-col gap-3 px-2.5 py-6 sm:px-6 sm:py-10 lg:px-8">
       <a href="#vp-app" className="sr-only-focusable rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">پرش به برنامه</a>
       <p aria-live="polite" className="sr-only">{status}</p>
 
