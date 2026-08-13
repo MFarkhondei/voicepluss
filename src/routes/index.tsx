@@ -517,7 +517,15 @@ function Index() {
     const list = listRef.current;
     const card = activeCardRef.current;
     if (!list || !card) return;
-    list.scrollTo({ top: Math.max(0, card.offsetTop - list.offsetTop - 8), behavior: "smooth" });
+    const cardTop = card.offsetTop - list.offsetTop;
+    const cardBottom = cardTop + card.offsetHeight;
+    const viewTop = list.scrollTop;
+    const viewBottom = viewTop + list.clientHeight;
+    if (cardTop < viewTop) {
+      list.scrollTo({ top: Math.max(0, cardTop - 8), behavior: "smooth" });
+    } else if (cardBottom > viewBottom) {
+      list.scrollTo({ top: cardBottom - list.clientHeight + 8, behavior: "smooth" });
+    }
   }, [activeSegmentIndex]);
 
   useLayoutEffect(() => {
@@ -1162,7 +1170,7 @@ function Index() {
               {onlyLowConfidence && !segmentQuery.trim() ? "بخشی با اطمینان پایین یافت نشد." : "موردی یافت نشد."}
             </p>
           ) : (
-            <ul ref={listRef} className="flex max-h-[13rem] min-w-0 flex-col gap-1.5 overflow-y-auto overflow-x-hidden">
+            <ul ref={listRef} className="flex max-h-[16rem] min-w-0 flex-col gap-1.5 overflow-y-auto overflow-x-hidden [mask-image:linear-gradient(to_bottom,black_calc(100%-28px),transparent_100%)] [-webkit-mask-image:linear-gradient(to_bottom,black_calc(100%-28px),transparent_100%)]">
               {filteredSegments.map(({ s, i }) => (
                 <SegmentRow
                   key={i}
@@ -1525,12 +1533,12 @@ function Index() {
           </>
         ) : (
           <div className="grid grid-cols-3 items-stretch">
-            <div className="h-[420px] min-w-0 overflow-y-auto">{uploadPanel}</div>
-            <div className="flex h-[420px] min-w-0 flex-col border-s border-border">
+            <div className="h-[440px] min-w-0 overflow-y-auto">{uploadPanel}</div>
+            <div className="flex h-[440px] min-w-0 flex-col border-s border-border">
               <div className="flex-1 overflow-y-auto">{playlistPanel}</div>
               {dockedPlayer}
             </div>
-            <div className="h-[420px] min-w-0 overflow-y-auto border-s border-border">{textPanel}</div>
+            <div className="h-[440px] min-w-0 overflow-y-auto border-s border-border">{textPanel}</div>
           </div>
         )}
       </div>
