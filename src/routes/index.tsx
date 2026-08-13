@@ -1366,13 +1366,6 @@ function Index() {
     </div>
   );
 
-  const desktopPlaylistPanel = (
-    <>
-      {playlistPanel}
-      <div className="hidden lg:block">{dockedPlayer}</div>
-    </>
-  );
-
   const tabs: { id: "upload" | "playlist" | "text"; label: string; icon: typeof Upload }[] = [
     { id: "upload", label: "بارگذاری", icon: Upload },
     { id: "playlist", label: "پلی‌لیست", icon: ListMusic },
@@ -1380,7 +1373,7 @@ function Index() {
   ];
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full min-w-0 max-w-md flex-col gap-3 px-2.5 py-6 sm:py-10 lg:max-w-[1600px] lg:px-6 lg:py-6">
+    <main className="mx-auto flex min-h-dvh w-full min-w-0 max-w-md flex-col gap-3 px-2.5 py-6 sm:py-10">
       <a href="#vp-app" className="sr-only-focusable rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">پرش به برنامه</a>
       <p aria-live="polite" className="sr-only">{status}</p>
 
@@ -1423,36 +1416,15 @@ function Index() {
           </ul>
         )}
 
-        {/* Desktop: keep all three sections open side-by-side.
-            With RTL layout, the DOM order below places upload on the right,
-            playlist in the center, and output text on the left. */}
-        <div className="hidden min-h-[300px] lg:flex lg:flex-row lg:items-stretch">
-          <section className="min-w-0 flex-1 border-l border-border" aria-label="بارگذاری">
-            <div className="border-b border-border px-4 py-3 text-sm font-medium">بارگذاری</div>
-            <div className="lg:min-h-[640px]">{uploadPanel}</div>
-          </section>
-
-          <section className="min-w-0 flex-1 border-l border-border" aria-label="پلی‌لیست">
-            <div className="border-b border-border px-4 py-3 text-sm font-medium">پلی‌لیست</div>
-            <div className="lg:min-h-[640px]">{desktopPlaylistPanel}</div>
-          </section>
-
-          <section className="min-w-0 flex-1" aria-label="متن خروجی">
-            <div className="border-b border-border px-4 py-3 text-sm font-medium">متن خروجی</div>
-            <div className="lg:min-h-[640px]">{textPanel}</div>
-          </section>
-        </div>
-
-        {/* Mobile/tablet: preserve the existing tab behavior. */}
-        <div className="min-h-[300px] lg:hidden">
+        <div className="min-h-[300px]">
           {activeTab === "upload" && uploadPanel}
           {activeTab === "playlist" && playlistPanel}
           {activeTab === "text" && textPanel}
         </div>
 
-        <div className="lg:hidden">{dockedPlayer}</div>
+        {dockedPlayer}
 
-        <div className="flex border-t border-border lg:hidden">
+        <div className="flex border-t border-border">
           {tabs.map((t) => {
             const Icon = t.icon;
             const isActive = activeTab === t.id;
