@@ -288,21 +288,8 @@ function Index() {
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [playbackRate, setPlaybackRate] = useState(() => {
-    try {
-      const v = Number(localStorage.getItem("vp_playbackRate"));
-      return PLAYBACK_RATES.includes(v) ? v : 1;
-    } catch {
-      return 1;
-    }
-  });
-  const [repeatMode, setRepeatMode] = useState<"off" | "inf" | "1" | "2" | "3" | "4" | "5">(() => {
-    try {
-      const v = localStorage.getItem("vp_repeatMode");
-      if (v && (v === "off" || v === "inf" || ["1", "2", "3", "4", "5"].includes(v))) return v as any;
-    } catch {}
-    return "off";
-  });
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [repeatMode, setRepeatMode] = useState<"off" | "inf" | "1" | "2" | "3" | "4" | "5">("off");
 
   const [peaks, setPeaks] = useState<number[]>([]);
   const [peaksLoading, setPeaksLoading] = useState(false);
@@ -339,9 +326,19 @@ function Index() {
   const loadGenRef = useRef(0);
   const seekCleanupRef = useRef<(() => void) | null>(null);
   const lastSavedTimeRef = useRef(0);
+  const mediaReadyRef = useRef(false);
 
   const setSourceFromBlob = useCallback((blob: Blob, opts?: { skipPeaks?: boolean; initialDuration?: number | null }) => {
-    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+    const previousUrl = audioUrlRef.current;
+    const currentPlayer = playerRef.current;
+    if (currentPlayer) {
+      currentPlayer.pause();
+      currentPlayer.removeAttribute("src");
+      // Firefox can keep the old Blob resource alive until load() explicitly
+      // detaches it. Revoking first may poison the next source on the same element.
+      currentPlayer.load();
+    }
+    if (previousUrl) URL.revokeObjectURL(previousUrl);
     // Generic "audio/*" is not a valid media type for HTMLAudioElement in some browsers
     let srcBlob = blob;
     if ((blob.type || "").trim() === "audio/*") {
@@ -352,6 +349,7 @@ function Index() {
     loadGenRef.current += 1;
     setAudioUrl(url);
     setPlaying(false);
+    mediaReadyRef.current = false;
     setCurrentTime(0);
     // Recordings (MediaRecorder webm blobs) often report duration as Infinity/NaN
     // until the browser finishes indexing them, which leaves the slider's max at 0
@@ -421,24 +419,9 @@ function Index() {
   }, [refreshLibrary]);
 
   const openLibraryItem = useCallback(async (id: string) => {
-    // Firefox blocks play() that happens after async work (its autoplay policy needs
-    // the call to come from the user gesture). Unlock the element synchronously here,
-    // while the click is still being handled, so the later auto-play is allowed.
-    {
-      const el = playerRef.current;
-      if (el) {
-        try {
-          el.muted = true;
-          const p = el.play();
-          if (p && typeof p.then === "function") {
-            void p.then(() => { el.pause(); el.muted = false; }).catch(() => { el.muted = false; });
-          } else {
-            el.pause();
-            el.muted = false;
-          }
-        } catch { el.muted = false; }
-      }
-    }
+    // Do not try to "unlock" the existing element before IndexedDB returns. In
+    // Firefox that old play promise can settle after the new source is installed
+    // and pause/abort the newly loaded file.
     setLoadingItemId(id);
     try {
 
@@ -469,7 +452,10 @@ function Index() {
       }
       pendingSeekRef.current = resume > 0 ? resume : null;
       lastSavedTimeRef.current = resume;
-      pendingPlayRef.current = true;
+      // Loading a Blob from IndexedDB is asynchronous, so Firefox no longer treats
+      // a later play() as part of this click. Load and restore the position here;
+      // the visible play button then starts it reliably with a fresh user gesture.
+      pendingPlayRef.current = false;
       // skipPeaks: avoid concurrent decodeAudioData while HTMLAudioElement starts
       setSourceFromBlob(item.blob, { skipPeaks: true, initialDuration: knownDur });
       window.setTimeout(() => loadPeaksFromBlob(item.blob), 600);
@@ -516,6 +502,16 @@ function Index() {
     apply();
     mq.addEventListener("change", apply);
     return () => mq.removeEventListener("change", apply);
+  }, []);
+  useEffect(() => {
+    try {
+      const savedRate = Number(localStorage.getItem("vp_playbackRate"));
+      if (PLAYBACK_RATES.includes(savedRate)) setPlaybackRate(savedRate);
+      const savedRepeat = localStorage.getItem("vp_repeatMode");
+      if (savedRepeat && (savedRepeat === "off" || savedRepeat === "inf" || ["1", "2", "3", "4", "5"].includes(savedRepeat))) {
+        setRepeatMode(savedRepeat as typeof repeatMode);
+      }
+    } catch { /* browser storage is optional */ }
   }, []);
   useEffect(() => { const el = playerRef.current; if (!el) return; el.playbackRate = playbackRate; }, [playbackRate, audioUrl]);
   useEffect(() => { try { localStorage.setItem("vp_playbackRate", String(playbackRate)); } catch {} }, [playbackRate]);
@@ -626,7 +622,20 @@ function Index() {
         stopAtRef.current = null;
         repeatIdxRef.current = null;
       }
-      void el.play().catch(() => setPlaying(false));
+      const start = () => {
+        void el.play().catch(() => {
+          setPlaying(false);
+          setError("مرورگر نتوانست صوت را پخش کند؛ دوباره روی پخش بزنید.");
+        });
+      };
+      if (mediaReadyRef.current || el.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        start();
+      } else {
+        const onReady = () => start();
+        el.addEventListener("canplay", onReady, { once: true });
+        // Explicit load is important for Firefox Blob URLs restored from IndexedDB.
+        el.load();
+      }
     } else el.pause();
   }, [audioUrl, repeatMode, activeSegmentIndex, segments]);
   const pauseForEdit = useCallback(() => {
@@ -658,15 +667,39 @@ function Index() {
     return d1 || d2 || 0;
   }, [duration]);
 
+  const setMediaTime = useCallback((el: HTMLAudioElement, next: number) => {
+    // Firefox may ignore currentTime assignments made before Blob metadata is
+    // available. Keep the requested time and apply it from loadedmetadata.
+    if (el.readyState < HTMLMediaElement.HAVE_METADATA) {
+      pendingSeekRef.current = next;
+      el.load();
+      return;
+    }
+    try {
+      el.currentTime = next;
+    } catch {
+      pendingSeekRef.current = next;
+      el.load();
+    }
+  }, []);
+
+  const playAfterUserSeek = useCallback((el: HTMLAudioElement) => {
+    // Waveform/range/skip interactions are explicit user gestures. Starting here
+    // (rather than from a later media event) satisfies Firefox autoplay policy.
+    if (el.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
+    void el.play().catch(() => setPlaying(false));
+  }, []);
+
   const skip = useCallback((delta: number) => {
     const el = playerRef.current;
     if (!el) return;
     clearMediaControlState();
     const total = safeDuration(el);
     const next = Math.max(0, Math.min(total, (el.currentTime || 0) + delta));
-    try { el.currentTime = next; } catch { /* ignore */ }
+    setMediaTime(el, next);
     setCurrentTime(next);
-  }, [clearMediaControlState, safeDuration]);
+    playAfterUserSeek(el);
+  }, [clearMediaControlState, safeDuration, setMediaTime, playAfterUserSeek]);
 
   const seekTo = useCallback((time: number) => {
     const el = playerRef.current;
@@ -675,9 +708,10 @@ function Index() {
     const total = safeDuration(el);
     const t = Number(time);
     const next = Math.max(0, Math.min(total, Number.isFinite(t) ? t : 0));
-    try { el.currentTime = next; } catch { /* ignore */ }
+    setMediaTime(el, next);
     setCurrentTime(next);
-  }, [clearMediaControlState, safeDuration]);
+    playAfterUserSeek(el);
+  }, [clearMediaControlState, safeDuration, setMediaTime, playAfterUserSeek]);
 
   const seekRatio = useCallback((ratio: number) => {
     const el = playerRef.current;
@@ -686,9 +720,10 @@ function Index() {
     const total = safeDuration(el);
     const r = Number.isFinite(ratio) ? Math.min(1, Math.max(0, ratio)) : 0;
     const next = Math.max(0, Math.min(total, r * total));
-    try { el.currentTime = next; } catch { /* ignore */ }
+    setMediaTime(el, next);
     setCurrentTime(next);
-  }, [clearMediaControlState, safeDuration]);
+    playAfterUserSeek(el);
+  }, [clearMediaControlState, safeDuration, setMediaTime, playAfterUserSeek]);
 
   const refineTranscript = useCallback(async () => {
     if (segments.length === 0 || refining) return;
@@ -1133,6 +1168,7 @@ function Index() {
                   }
                 }}
                 onCanPlay={(e) => {
+                  mediaReadyRef.current = true;
                   // one-shot auto-play after playlist click (optionally resume)
                   if (!pendingPlayRef.current) return;
                   const gen = loadGenRef.current;
@@ -1229,6 +1265,14 @@ function Index() {
                   el.addEventListener("durationchange", onDurationFixed);
                   el.addEventListener("timeupdate", onTimeUpdateOnce, { once: true });
                   try { el.currentTime = 1e101; } catch { finishPriming(0); }
+                }}
+                onError={(e) => {
+                  mediaReadyRef.current = false;
+                  setPlaying(false);
+                  const code = e.currentTarget.error?.code;
+                  setError(code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED
+                    ? "فرمت این فایل صوتی در فایرفاکس پشتیبانی نمی‌شود."
+                    : "بارگذاری فایل صوتی با خطا روبه‌رو شد؛ دوباره آن را از پلی‌لیست باز کنید.");
                 }}
                 onTimeUpdate={(e) => {
                   const el = e.currentTarget;
