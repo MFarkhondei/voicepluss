@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Mic,
   Square,
@@ -152,7 +152,7 @@ async function transcribeOne(
   throw lastError ?? new Error("خطای ناشناخته در تبدیل");
 }
 
-function SegmentRow({
+function SegmentRowImpl({
   seg, index, isActive, isPlaying, hasAudio, cardRef, onSeek, onPlayOnly, onTogglePlay, onChange, onEditStart,
 }: {
   seg: Segment; index: number; isActive: boolean; isPlaying: boolean; hasAudio: boolean;
@@ -247,6 +247,10 @@ function SegmentRow({
   );
 }
 
+// در پلی‌لیست‌های طولانی، پخش صوت با onTimeUpdate مکرر state را آپدیت
+// می‌کرد و بدون memo کل لیست رندر می‌شد، نه فقط ردیف فعال — همین باعث
+// کند شدن نمایش متن هنگام پخش/اسکرول می‌شد.
+const SegmentRow = memo(SegmentRowImpl);
 
 function Index() {
   const [recording, setRecording] = useState(false);
