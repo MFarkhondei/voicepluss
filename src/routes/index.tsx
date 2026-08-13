@@ -153,11 +153,11 @@ async function transcribeOne(
 }
 
 function SegmentRow({
-  seg, index, isActive, isPlaying, hasAudio, cardRef, onSeek, onPlayOnly, onPlayContinue, onTogglePlay, onChange, onEditStart,
+  seg, index, isActive, isPlaying, hasAudio, cardRef, onSeek, onPlayOnly, onTogglePlay, onChange, onEditStart,
 }: {
   seg: Segment; index: number; isActive: boolean; isPlaying: boolean; hasAudio: boolean;
   cardRef?: (el: HTMLLIElement | null) => void;
-  onSeek: (t: number) => void; onPlayOnly: (s: Segment, i: number) => void; onPlayContinue: (s: Segment, i: number) => void; onTogglePlay: () => void;
+  onSeek: (t: number) => void; onPlayOnly: (s: Segment, i: number) => void; onTogglePlay: () => void;
   onChange: (index: number, value: string) => void;
   onEditStart?: () => void;
 }) {
@@ -217,7 +217,22 @@ function SegmentRow({
         ) : null}
       </div>
       <div className="flex min-w-0 items-start gap-2 sm:gap-3">
-        <button type="button" onClick={() => onSeek(seg.start)} aria-label={`پرش به دقیقه ${formatTime(seg.start)}`} className="shrink-0 pt-1.5 font-mono text-xs text-muted-foreground hover:text-primary focus-visible:ring-2 focus-visible:ring-ring" title="پرش به این بخش">{formatTime(seg.start)}</button>
+        <div className="flex shrink-0 flex-col items-center gap-1.5">
+          <button type="button" onClick={() => onSeek(seg.start)} aria-label={`پرش به دقیقه ${formatTime(seg.start)}`} className="pt-1.5 font-mono text-xs text-muted-foreground hover:text-primary focus-visible:ring-2 focus-visible:ring-ring" title="پرش به این بخش">{formatTime(seg.start)}</button>
+          <button
+            type="button"
+            onClick={() => isPlaying ? onTogglePlay() : onPlayOnly(seg, index)}
+            disabled={!hasAudio}
+            aria-label={isPlaying ? "توقف پخش" : "فقط همین متن پخش شود"}
+            className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
+            title={isPlaying ? "توقف پخش" : "فقط همین متن پخش شود"}
+          >
+            {isPlaying ? <Pause className="size-4" aria-hidden="true" /> : <Play className="size-4" aria-hidden="true" />}
+          </button>
+          <button type="button" onClick={() => void translate()} disabled={translating || !draft.trim()} aria-label="ترجمه به فارسی" className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40" title="ترجمه به فارسی">
+            {translating ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Languages className="size-4" aria-hidden="true" />}
+          </button>
+        </div>
         <div className="min-w-0 flex-1">
           <textarea ref={taRef} value={draft} aria-label={`متن بخش ${index + 1} از دقیقه ${formatTime(seg.start)}`} onFocus={() => { onEditStart?.(); setEditing(true); }} onChange={(e) => { setDraft(e.target.value); onChange(index, e.target.value); }} onBlur={() => setEditing(false)} rows={3} wrap="soft" style={{ minHeight: "72px" }} className="block w-full resize-none overflow-hidden rounded-lg border border-transparent bg-transparent p-1.5 text-right text-sm leading-6 outline-none focus:overflow-x-auto focus:border-border focus:bg-card focus:ring-2 focus:ring-ring" dir="rtl" />
           {translation ? (
@@ -226,22 +241,6 @@ function SegmentRow({
           {translateError ? (
             <p dir="rtl" className="mt-1.5 text-right text-xs text-destructive">{translateError}</p>
           ) : null}
-        </div>
-        <div className="flex shrink-0 flex-col gap-1.5">
-          <button type="button" onClick={() => onPlayOnly(seg, index)} disabled={!hasAudio} aria-label="فقط همین متن پخش شود" className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40" title="فقط همین متن پخش شود"><Play className="size-4" aria-hidden="true" /></button>
-          <button
-            type="button"
-            onClick={() => isPlaying ? onTogglePlay() : onPlayContinue(seg, index)}
-            disabled={!hasAudio}
-            aria-label={isPlaying ? "توقف پخش" : "از این متن به بعد پخش شود"}
-            className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
-            title={isPlaying ? "توقف پخش" : "از این متن به بعد پخش شود"}
-          >
-            {isPlaying ? <Pause className="size-4" aria-hidden="true" /> : <SkipForward className="size-4" aria-hidden="true" />}
-          </button>
-          <button type="button" onClick={() => void translate()} disabled={translating || !draft.trim()} aria-label="ترجمه به فارسی" className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40" title="ترجمه به فارسی">
-            {translating ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Languages className="size-4" aria-hidden="true" />}
-          </button>
         </div>
       </div>
     </li>
@@ -515,10 +514,9 @@ function Index() {
 
   useEffect(() => {
     if (activeSegmentIndex < 0) return;
-    const list = listRef.current;
     const card = activeCardRef.current;
-    if (!list || !card) return;
-    list.scrollTo({ top: Math.max(0, card.offsetTop - list.offsetTop - 8), behavior: "smooth" });
+    if (!card) return;
+    card.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [activeSegmentIndex]);
 
   useLayoutEffect(() => {
@@ -570,17 +568,6 @@ function Index() {
     repeatDoneRef.current = 0;
     playFrom(s.start, s.end);
   }, [playFrom]);
-  const playSegmentContinue = useCallback((s: Segment, i?: number) => {
-    playOnlyRef.current = false;
-    if (repeatMode !== "off" && typeof i === "number") {
-      repeatIdxRef.current = i;
-      repeatDoneRef.current = 0;
-      playFrom(s.start, s.end);
-      return;
-    }
-    repeatIdxRef.current = null;
-    playFrom(s.start, null);
-  }, [playFrom, repeatMode]);
   const togglePlay = useCallback(() => {
     const el = playerRef.current;
     if (!el || !audioUrl) return;
@@ -647,6 +634,18 @@ function Index() {
     try { el.currentTime = next; } catch { /* ignore */ }
     setCurrentTime(next);
   }, [clearMediaControlState, safeDuration]);
+
+  const goToNextSegment = useCallback(() => {
+    if (segments.length === 0) return;
+    const idx = activeSegmentIndex < 0 ? 0 : Math.min(segments.length - 1, activeSegmentIndex + 1);
+    seekTo(segments[idx].start);
+  }, [segments, activeSegmentIndex, seekTo]);
+
+  const goToPrevSegment = useCallback(() => {
+    if (segments.length === 0) return;
+    const idx = activeSegmentIndex <= 0 ? 0 : activeSegmentIndex - 1;
+    seekTo(segments[idx].start);
+  }, [segments, activeSegmentIndex, seekTo]);
 
   const filteredSegments = useMemo(() => {
     let list = segments.map((s, i) => ({ s, i }));
@@ -1139,7 +1138,7 @@ function Index() {
               {onlyLowConfidence && !segmentQuery.trim() ? "بخشی با اطمینان پایین یافت نشد." : "موردی یافت نشد."}
             </p>
           ) : (
-            <ul ref={listRef} className="flex max-h-[13rem] min-w-0 flex-col gap-1.5 overflow-y-auto overflow-x-hidden">
+            <ul ref={listRef} className="flex min-w-0 flex-col gap-1.5">
               {filteredSegments.map(({ s, i }) => (
                 <SegmentRow
                   key={i}
@@ -1151,7 +1150,6 @@ function Index() {
                   cardRef={i === activeSegmentIndex ? (el) => { activeCardRef.current = el; } : undefined}
                   onSeek={seekTo}
                   onPlayOnly={playSegmentOnly}
-                  onPlayContinue={playSegmentContinue}
                   onTogglePlay={togglePlay}
                   onChange={updateSegmentText}
                   onEditStart={pauseForEdit}
@@ -1356,14 +1354,14 @@ function Index() {
 
       <div className="relative flex items-center justify-center pb-2.5">
         <div className="flex items-center justify-center gap-3.5">
-          <button type="button" onClick={() => skip(SKIP_SECONDS)} aria-label={`${SKIP_SECONDS} ثانیه جلو`} className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-secondary">
-            {SKIP_SECONDS}<SkipForward className="size-3.5" aria-hidden="true" />
+          <button type="button" onClick={goToNextSegment} disabled={segments.length === 0} aria-label="متن بعدی" title="متن بعدی" className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-secondary disabled:opacity-40">
+            <SkipForward className="size-3.5" aria-hidden="true" />
           </button>
           <button type="button" onClick={togglePlay} aria-label={playing ? "توقف" : "پخش"} className="inline-flex size-11 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90">
             {playing ? <Pause className="size-5" aria-hidden="true" /> : <Play className="ml-0.5 size-5" aria-hidden="true" />}
           </button>
-          <button type="button" onClick={() => skip(-SKIP_SECONDS)} aria-label={`${SKIP_SECONDS} ثانیه عقب`} className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-secondary">
-            <SkipBack className="size-3.5" aria-hidden="true" />{SKIP_SECONDS}
+          <button type="button" onClick={goToPrevSegment} disabled={segments.length === 0} aria-label="متن قبلی" title="متن قبلی" className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-secondary disabled:opacity-40">
+            <SkipBack className="size-3.5" aria-hidden="true" />
           </button>
         </div>
 
