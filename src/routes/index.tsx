@@ -167,6 +167,12 @@ function SegmentRow({
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const low = isLowConfidence(seg.confidence);
   useEffect(() => { if (!editing) setDraft(seg.text); }, [seg.text, editing]);
+  useLayoutEffect(() => {
+    const el = taRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.max(el.scrollHeight, 72)}px`;
+  }, [draft]);
 
   const translate = useCallback(async () => {
     const value = draft.trim();
@@ -211,7 +217,7 @@ function SegmentRow({
       <div className="flex min-w-0 items-start gap-2 sm:gap-3">
         <button type="button" onClick={() => onSeek(seg.start)} aria-label={`پرش به دقیقه ${formatTime(seg.start)}`} className="shrink-0 pt-1.5 font-mono text-xs text-muted-foreground hover:text-primary focus-visible:ring-2 focus-visible:ring-ring" title="پرش به این بخش">{formatTime(seg.start)}</button>
         <div className="min-w-0 flex-1">
-          <textarea ref={taRef} value={draft} aria-label={`متن بخش ${index + 1} از دقیقه ${formatTime(seg.start)}`} onFocus={() => { onEditStart?.(); setEditing(true); }} onChange={(e) => { setDraft(e.target.value); onChange(index, e.target.value); }} onBlur={() => setEditing(false)} rows={3} wrap="soft" className="block w-full resize-none overflow-hidden rounded-lg border border-transparent bg-transparent p-1.5 text-right text-sm leading-6 outline-none focus:overflow-x-auto focus:border-border focus:bg-card focus:ring-2 focus:ring-ring" dir="rtl" />
+          <textarea ref={taRef} value={draft} aria-label={`متن بخش ${index + 1} از دقیقه ${formatTime(seg.start)}`} onFocus={() => { onEditStart?.(); setEditing(true); }} onChange={(e) => { setDraft(e.target.value); onChange(index, e.target.value); }} onBlur={() => setEditing(false)} rows={3} wrap="soft" className="block w-full min-h-[72px] resize-none overflow-hidden whitespace-pre-wrap break-words rounded-lg border border-transparent bg-transparent p-1.5 text-right text-sm leading-6 outline-none focus:border-border focus:bg-card focus:ring-2 focus:ring-ring" dir="rtl" />
           {translation ? (
             <p dir="rtl" className="mt-1.5 rounded-lg border border-accent/30 bg-accent/10 p-2 text-right text-sm leading-7">{translation}</p>
           ) : null}
@@ -947,7 +953,7 @@ function Index() {
               onClick={startTranscription}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-2 py-2 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
             >
-              <Sparkles className="size-4" aria-hidden="true" /> شروع تبدیل به متن
+              <Sparkles className="size-4" aria-hidden="true" /> تبدیل به متن
             </button>
           </div>
         </div>
@@ -977,7 +983,7 @@ function Index() {
       {library.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted-foreground">هنوز فایلی ذخیره نشده است.</p>
       ) : (
-        <ul className="flex max-h-[9.5rem] flex-col gap-1.5 overflow-y-auto">
+        <ul className="flex max-h-[7rem] flex-col gap-1.5 overflow-y-auto">
           {library.map((item) => {
             const active = item.id === currentItemId;
             return (
