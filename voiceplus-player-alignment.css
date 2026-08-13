@@ -1,0 +1,45 @@
+
+/* === VoicePlus player control alignment ===
+   Play is mathematically centered in the player/viewport.
+   Other transport controls remain on the right/left without shifting it.
+*/
+.player-controls,
+.playback-controls,
+.audio-player-controls,
+.media-controls {
+  display: grid !important;
+  grid-template-columns: 1fr auto 1fr !important;
+  align-items: center !important;
+  width: 100% !important;
+  position: relative !important;
+}
+
+.player-controls .play-button,
+.playback-controls .play-button,
+.audio-player-controls .play-button,
+.media-controls .play-button {
+  grid-column: 2 !important;
+  justify-self: center !important;
+  position: static !important;
+  transform: none !important;
+}
+
+.player-controls .right-controls,
+.playback-controls .right-controls,
+.audio-player-controls .right-controls,
+.media-controls .right-controls {
+  grid-column: 3 !important;
+  justify-self: end !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+.player-controls .left-controls,
+.playback-controls .left-controls,
+.audio-player-controls .left-controls,
+.media-controls .left-controls {
+  grid-column: 1 !important;
+  justify-self: start !important;
+  display: flex !important;
+  align-items: center !important;
+}
