@@ -167,12 +167,6 @@ function SegmentRow({
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const low = isLowConfidence(seg.confidence);
   useEffect(() => { if (!editing) setDraft(seg.text); }, [seg.text, editing]);
-  useEffect(() => {
-    const el = taRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }, [draft]);
 
   const translate = useCallback(async () => {
     const value = draft.trim();
@@ -217,7 +211,7 @@ function SegmentRow({
       <div className="flex min-w-0 items-start gap-2 sm:gap-3">
         <button type="button" onClick={() => onSeek(seg.start)} aria-label={`پرش به دقیقه ${formatTime(seg.start)}`} className="shrink-0 pt-1.5 font-mono text-xs text-muted-foreground hover:text-primary focus-visible:ring-2 focus-visible:ring-ring" title="پرش به این بخش">{formatTime(seg.start)}</button>
         <div className="min-w-0 flex-1">
-          <textarea ref={taRef} value={draft} aria-label={`متن بخش ${index + 1} از دقیقه ${formatTime(seg.start)}`} onFocus={() => { onEditStart?.(); setEditing(true); }} onChange={(e) => { setDraft(e.target.value); onChange(index, e.target.value); }} onBlur={() => setEditing(false)} rows={1} className="block w-full resize-none overflow-hidden rounded-lg border border-transparent bg-transparent p-1.5 text-right text-sm leading-7 outline-none focus:border-border focus:bg-card focus:ring-2 focus:ring-ring" dir="rtl" />
+          <textarea ref={taRef} value={draft} aria-label={`متن بخش ${index + 1} از دقیقه ${formatTime(seg.start)}`} onFocus={() => { onEditStart?.(); setEditing(true); }} onChange={(e) => { setDraft(e.target.value); onChange(index, e.target.value); }} onBlur={() => setEditing(false)} rows={1} wrap="off" className="block w-full resize-none overflow-hidden text-ellipsis whitespace-nowrap rounded-lg border border-transparent bg-transparent p-1.5 text-right text-sm leading-6 outline-none focus:overflow-x-auto focus:border-border focus:bg-card focus:ring-2 focus:ring-ring" dir="rtl" />
           {translation ? (
             <p dir="rtl" className="mt-1.5 rounded-lg border border-accent/30 bg-accent/10 p-2 text-right text-sm leading-7">{translation}</p>
           ) : null}
@@ -1077,6 +1071,19 @@ function Index() {
             ) : null}
           </div>
 
+          <div className="flex items-center gap-1.5">
+            <button onClick={copy} disabled={segments.length === 0} aria-label="کپی متن" className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg bg-primary px-2 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+              {copied ? <Check className="size-3.5" aria-hidden="true" /> : <Copy className="size-3.5" aria-hidden="true" />}{copied ? "کپی شد" : "کپی"}
+            </button>
+            {!loading && <button onClick={() => downloadSubtitle("srt")} aria-label="دانلود فایل زیرنویس SRT" className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg border border-border px-2 py-1.5 text-[11px] font-medium transition-colors hover:bg-secondary"><Download className="size-3.5" aria-hidden="true" /> SRT</button>}
+            {!loading && <button onClick={() => downloadSubtitle("txt")} aria-label="دانلود فایل متنی TXT" className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg border border-border px-2 py-1.5 text-[11px] font-medium transition-colors hover:bg-secondary"><Download className="size-3.5" aria-hidden="true" /> TXT</button>}
+            {!loading && (
+              <button onClick={() => void runAnalysis("quick")} disabled={analyzing || segments.length === 0} className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg border border-border px-2 py-1.5 text-[11px] font-medium transition-colors hover:bg-secondary disabled:opacity-50">
+                {analyzing ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : <Sparkles className="size-3.5" aria-hidden="true" />}{analyzing ? "…" : "تحلیل"}
+              </button>
+            )}
+          </div>
+
           <div className="flex items-center gap-2">
             <Search className="pointer-events-none absolute mr-2.5 size-4 text-muted-foreground" aria-hidden="true" />
             <input
@@ -1093,7 +1100,7 @@ function Index() {
               {onlyLowConfidence && !segmentQuery.trim() ? "بخشی با اطمینان پایین یافت نشد." : "موردی یافت نشد."}
             </p>
           ) : (
-            <ul ref={listRef} className="flex max-h-[22rem] min-w-0 flex-col gap-2 overflow-y-auto overflow-x-hidden">
+            <ul ref={listRef} className="flex max-h-[13rem] min-w-0 flex-col gap-1.5 overflow-y-auto overflow-x-hidden">
               {filteredSegments.map(({ s, i }) => (
                 <SegmentRow
                   key={i}
@@ -1119,24 +1126,12 @@ function Index() {
             </p>
           )}
 
-          <div className="flex flex-wrap items-center gap-1.5 border-t border-border pt-3">
-            <button onClick={copy} disabled={segments.length === 0} aria-label="کپی متن" className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
-              {copied ? <Check className="size-3.5" aria-hidden="true" /> : <Copy className="size-3.5" aria-hidden="true" />}{copied ? "کپی شد" : "کپی"}
-            </button>
-            {!loading && <button onClick={() => downloadSubtitle("srt")} aria-label="دانلود فایل زیرنویس SRT" className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-[11px] font-medium transition-colors hover:bg-secondary"><Download className="size-3.5" aria-hidden="true" /> SRT</button>}
-            {!loading && <button onClick={() => downloadSubtitle("txt")} aria-label="دانلود فایل متنی TXT" className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-[11px] font-medium transition-colors hover:bg-secondary"><Download className="size-3.5" aria-hidden="true" /> TXT</button>}
-            {!loading && (
-              <button onClick={() => void runAnalysis("quick")} disabled={analyzing || segments.length === 0} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-[11px] font-medium transition-colors hover:bg-secondary disabled:opacity-50">
-                {analyzing ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : <Sparkles className="size-3.5" aria-hidden="true" />}{analyzing ? "در حال تحلیل…" : "تحلیل متن"}
-              </button>
-            )}
-          </div>
-
           {analysisPanel}
         </>
       )}
     </div>
   );
+
 
   const dockedPlayer = audioUrl && (
     <div className="border-t border-border bg-surface/60 px-3.5 pb-1.5 pt-2.5">
@@ -1351,16 +1346,17 @@ function Index() {
       </div>
 
       <div className="flex items-center justify-center gap-3.5 pb-2.5">
-        <button type="button" onClick={() => skip(-SKIP_SECONDS)} aria-label={`${SKIP_SECONDS} ثانیه عقب`} className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-secondary">
-          <SkipBack className="size-3.5" aria-hidden="true" />{SKIP_SECONDS}
+        <button type="button" onClick={() => skip(SKIP_SECONDS)} aria-label={`${SKIP_SECONDS} ثانیه جلو`} className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-secondary">
+          {SKIP_SECONDS}<SkipForward className="size-3.5" aria-hidden="true" />
         </button>
         <button type="button" onClick={togglePlay} aria-label={playing ? "توقف" : "پخش"} className="inline-flex size-11 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90">
           {playing ? <Pause className="size-5" aria-hidden="true" /> : <Play className="ml-0.5 size-5" aria-hidden="true" />}
         </button>
-        <button type="button" onClick={() => skip(SKIP_SECONDS)} aria-label={`${SKIP_SECONDS} ثانیه جلو`} className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-secondary">
-          {SKIP_SECONDS}<SkipForward className="size-3.5" aria-hidden="true" />
+        <button type="button" onClick={() => skip(-SKIP_SECONDS)} aria-label={`${SKIP_SECONDS} ثانیه عقب`} className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-secondary">
+          <SkipBack className="size-3.5" aria-hidden="true" />{SKIP_SECONDS}
         </button>
       </div>
+
     </div>
   );
 
