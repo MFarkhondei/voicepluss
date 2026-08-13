@@ -56,7 +56,10 @@ function openDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(BLOB_STORE)) {
         db.createObjectStore(BLOB_STORE, { keyPath: "id" });
       }
-      // مهاجرت از طرح قدیمی (نسخهٔ ۱): یک رکورد ترکیبی در «library»
+      // مهاجرت از طرح قدیمی (نسخهٔ ۱): یک رکورد ترکیبی در «library».
+      // نکتهٔ مهم: حذف Store قدیمی باید بعد از اتمام کامل کپی (وقتی cursor
+      // به آخر می‌رسد) انجام شود — حذف زودهنگام باعث می‌شد مهاجرت ناقص
+      // بماند و پلی‌لیست قبلی کاربر خالی به نظر برسد.
       if (oldVersion < 2 && db.objectStoreNames.contains(OLD_STORE)) {
         const migTx = req.transaction;
         if (migTx) {
@@ -66,15 +69,19 @@ function openDb(): Promise<IDBDatabase> {
           const cursorReq = oldStore.openCursor();
           cursorReq.onsuccess = () => {
             const cursor = cursorReq.result;
-            if (!cursor) return;
+            if (!cursor) {
+              db.deleteObjectStore(OLD_STORE);
+              return;
+            }
             const old = cursor.value as LibraryItem;
             const { blob, ...meta } = old;
             metaStore.put(meta);
             if (blob) blobStore.put({ id: old.id, blob });
             cursor.continue();
           };
+        } else {
+          db.deleteObjectStore(OLD_STORE);
         }
-        db.deleteObjectStore(OLD_STORE);
       }
     };
     req.onsuccess = () => resolve(req.result);
