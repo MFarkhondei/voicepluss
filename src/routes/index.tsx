@@ -26,7 +26,7 @@ import {
   X,
   Clock,
 } from "lucide-react";
-import { encodeWav } from "@/lib/wav";
+import { encodeWav, audioBufferToWav } from "@/lib/wav";
 import { toSrt, toTxt, downloadText, parseSrt } from "@/lib/subtitles";
 import { prepareAudioForTranscription, DEFAULT_PART_MINUTES } from "@/lib/splitAudio";
 import { extractPeaks } from "@/lib/waveform";
@@ -342,12 +342,10 @@ function Index() {
 
   const setSourceFromBlob = useCallback((blob: Blob, opts?: { skipPeaks?: boolean; initialDuration?: number | null }) => {
     if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
-    // Generic "audio/*" is not a valid media type for HTMLAudioElement in some browsers
-    let srcBlob = blob;
-    if ((blob.type || "").trim() === "audio/*") {
-      srcBlob = new Blob([blob], { type: "audio/webm" });
-    }
-    const url = URL.createObjectURL(srcBlob);
+    // Never rewrite a generic/unknown MIME type to a guessed container. Firefox is
+    // especially sensitive to a mismatched Blob MIME type. Keep the original Blob
+    // untouched and only use a real transcoded fallback when needed for playlist items.
+    const url = URL.createObjectURL(blob);
     audioUrlRef.current = url;
     loadGenRef.current += 1;
     setAudioUrl(url);
@@ -432,6 +430,46 @@ function Index() {
     return id;
   }, [refreshLibrary]);
 
+  const prepareFirefoxPlaylistPlayback = useCallback(async (blob: Blob): Promise<{ blob: Blob; duration: number | null }> => {
+    const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+    const isFirefox = /Firefox|FxiOS/i.test(ua);
+    const type = (blob.type || "").toLowerCase();
+    const needsFallback = isFirefox && (
+      type.includes("webm") ||
+      type.includes("ogg") ||
+      type.includes("opus") ||
+      type === "audio/*" ||
+      !type.startsWith("audio/")
+    );
+    if (!needsFallback) return { blob, duration: null };
+
+    try {
+      const OfflineCtor = (window as unknown as {
+        OfflineAudioContext?: typeof OfflineAudioContext;
+        webkitOfflineAudioContext?: typeof OfflineAudioContext;
+      }).OfflineAudioContext || (window as unknown as {
+        webkitOfflineAudioContext?: typeof OfflineAudioContext;
+      }).webkitOfflineAudioContext;
+      if (!OfflineCtor) return { blob, duration: null };
+
+      const ctx = new OfflineCtor(1, 1, 44100);
+      let arrayBuffer = await blob.arrayBuffer();
+      let decoded: AudioBuffer;
+      try {
+        decoded = await ctx.decodeAudioData(arrayBuffer);
+      } finally {
+        arrayBuffer = new ArrayBuffer(0);
+      }
+      const wav = audioBufferToWav(decoded);
+      const duration = decoded.duration > 0 ? decoded.duration : null;
+      return { blob: wav, duration };
+    } catch {
+      // If decoding/transcoding fails, fall back to the original file rather than
+      // blocking the playlist item completely.
+      return { blob, duration: null };
+    }
+  }, []);
+
   const openLibraryItem = useCallback(async (id: string) => {
     setLoadingItemId(id);
     try {
@@ -463,13 +501,23 @@ function Index() {
       pendingSeekRef.current = resume > 0 ? resume : null;
       lastSavedTimeRef.current = resume;
       pendingPlayRef.current = true;
+
+      // Firefox can prematurely stop some recorded WebM/Opus blobs when they are
+      // replayed directly from IndexedDB/Blob URLs (often after only a few seconds).
+      // For playlist playback only, convert those blobs to PCM WAV first. This also
+      // gives Firefox a reliable duration/seek index while keeping Chrome/Safari on
+      // the original file path.
+      const prepared = await prepareFirefoxPlaylistPlayback(item.blob);
+      const playbackDuration = knownDur ?? prepared.duration;
+      const playbackBlob = prepared.blob;
+
       // skipPeaks: avoid concurrent decodeAudioData while HTMLAudioElement starts
-      setSourceFromBlob(item.blob, { skipPeaks: true, initialDuration: knownDur });
+      setSourceFromBlob(playbackBlob, { skipPeaks: true, initialDuration: playbackDuration });
       window.setTimeout(() => loadPeaksFromBlob(item.blob), 600);
     } finally {
       setLoadingItemId(null);
     }
-  }, [cancelJob, clearAnalysis, refreshLibrary, setSourceFromBlob, loadPeaksFromBlob]);
+  }, [cancelJob, clearAnalysis, refreshLibrary, setSourceFromBlob, loadPeaksFromBlob, prepareFirefoxPlaylistPlayback]);
 
   const removeLibraryItem = useCallback(async (id: string) => {
     await deleteLibraryItem(id);
