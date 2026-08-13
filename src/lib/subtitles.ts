@@ -1,4 +1,24 @@
 
+/* playlist-row-download-button */
+function renderPlaylistDownloadButton(item) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "playlist-download-button";
+  button.setAttribute("aria-label", "دانلود فایل صوتی");
+  button.title = "دانلود فایل صوتی";
+  button.textContent = "دانلود";
+  button.addEventListener("click", async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const audioUrl = item?.audioUrl || item?.url || item?.src;
+    if (audioUrl && typeof downloadPlaylistAudio === "function") {
+      await downloadPlaylistAudio(audioUrl, item?.filename || "audio");
+    }
+  });
+  return button;
+}
+
+
 /* playlist-audio-download-support */
 async function downloadPlaylistAudio(audioUrl, filename = "audio") {
   if (!audioUrl) return;

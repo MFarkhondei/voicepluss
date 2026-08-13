@@ -1,0 +1,1 @@
+The audio download control is intended for each playlist row, next to the delete control, and not in the playback controls.
