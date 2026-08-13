@@ -1460,18 +1460,18 @@ function Index() {
 
       <div id="vp-app" className="panel flex min-w-0 flex-col overflow-hidden rounded-[20px]">
         <div className="flex items-center justify-between gap-2 border-b border-border px-3.5 py-3">
-          <button
-            type="button"
-            onClick={() => void runHealthCheck()}
-            disabled={health.state === "checking"}
-            title={health.message}
-            className="inline-flex min-w-0 items-center gap-1.5"
-          >
-            <span className={`size-1.5 shrink-0 rounded-full ${healthDotClass}`} aria-hidden="true" />
-            <span className="truncate text-[11px] text-muted-foreground">{healthLabel}</span>
-          </button>
           <p className="text-[15px] font-medium">VoicePluss</p>
           <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => void runHealthCheck()}
+              disabled={health.state === "checking"}
+              title={health.message}
+              className="inline-flex min-w-0 items-center gap-1.5"
+            >
+              <span className={`size-1.5 shrink-0 rounded-full ${healthDotClass}`} aria-hidden="true" />
+              <span className="truncate text-[11px] text-muted-foreground">{healthLabel}</span>
+            </button>
             <button
               type="button"
               onClick={() => setShowShortcuts((v) => !v)}
