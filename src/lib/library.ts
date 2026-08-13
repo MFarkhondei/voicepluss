@@ -1,4 +1,15 @@
 // ذخیره‌سازی محلی پلی‌لیست (فایل صوتی + متن + آخرین موقعیت پخش) با IndexedDB
+//
+// طرح دیتابیس عمداً به دو Object Store جدا تقسیم شده: «meta» (متادیتا:
+// نام، مدت، آخرین موقعیت پخش، متن، بخش‌ها) و «blobs» (فقط خود فایل صوتی).
+// دلیل: در نسخهٔ قبلی هر دو در یک رکورد بودند، پس هر آپدیت کوچکِ متادیتا
+// (مثلاً هر ۴ ثانیه ذخیرهٔ lastTime حین پخش، یا آپدیت duration/text/segments
+// چند صد میلی‌ثانیه پس از باز شدن آیتم) مجبور بود کل رکورد را دوباره
+// بخواند و بنویسد — یعنی فایل صوتی چند مگابایتی را هم هر بار دوباره
+// serialize/clone و در IndexedDB بازنویسی می‌کرد. این کار سنگین درست در
+// همان چند ثانیهٔ اول پخش انجام می‌شد و در فایرفاکس باعث تپق/توقف پخش
+// می‌شد. با جدا کردن blob از متادیتا، آپدیت‌های متداول اصلاً به Blob
+// دست نمی‌زنند.
 
 export type LibrarySegment = {
   start: number;
@@ -7,7 +18,7 @@ export type LibrarySegment = {
   confidence?: number | null;
 };
 
-export type LibraryItem = {
+export type LibraryMeta = {
   id: string;
   name: string;
   createdAt: number;
@@ -18,14 +29,15 @@ export type LibraryItem = {
   lastTime: number;
   text: string;
   segments: LibrarySegment[];
-  blob: Blob;
 };
 
-export type LibraryMeta = Omit<LibraryItem, "blob">;
+export type LibraryItem = LibraryMeta & { blob: Blob };
 
 const DB_NAME = "voicepluss";
-const STORE = "library";
-const VERSION = 1;
+const META_STORE = "meta";
+const BLOB_STORE = "blobs";
+const OLD_STORE = "library"; // نام Object Store در نسخهٔ قدیمی (تک‌جدولی)
+const VERSION = 2;
 const MAX_ITEMS = 20;
 
 function openDb(): Promise<IDBDatabase> {
@@ -35,10 +47,34 @@ function openDb(): Promise<IDBDatabase> {
       return;
     }
     const req = indexedDB.open(DB_NAME, VERSION);
-    req.onupgradeneeded = () => {
+    req.onupgradeneeded = (event) => {
       const db = req.result;
-      if (!db.objectStoreNames.contains(STORE)) {
-        db.createObjectStore(STORE, { keyPath: "id" });
+      const oldVersion = event.oldVersion || 0;
+      if (!db.objectStoreNames.contains(META_STORE)) {
+        db.createObjectStore(META_STORE, { keyPath: "id" });
+      }
+      if (!db.objectStoreNames.contains(BLOB_STORE)) {
+        db.createObjectStore(BLOB_STORE, { keyPath: "id" });
+      }
+      // مهاجرت از طرح قدیمی (نسخهٔ ۱): یک رکورد ترکیبی در «library»
+      if (oldVersion < 2 && db.objectStoreNames.contains(OLD_STORE)) {
+        const migTx = req.transaction;
+        if (migTx) {
+          const oldStore = migTx.objectStore(OLD_STORE);
+          const metaStore = migTx.objectStore(META_STORE);
+          const blobStore = migTx.objectStore(BLOB_STORE);
+          const cursorReq = oldStore.openCursor();
+          cursorReq.onsuccess = () => {
+            const cursor = cursorReq.result;
+            if (!cursor) return;
+            const old = cursor.value as LibraryItem;
+            const { blob, ...meta } = old;
+            metaStore.put(meta);
+            if (blob) blobStore.put({ id: old.id, blob });
+            cursor.continue();
+          };
+        }
+        db.deleteObjectStore(OLD_STORE);
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -46,15 +82,37 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-function tx<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+/** یک تراکنش روی یک یا چند Object Store اجرا می‌کند.
+ * fn می‌تواند صفر یا چند درخواست (put/delete/...) صادر کند و به‌صورت اختیاری
+ * آخرین IDBRequest را برای گرفتن مقدار برگشتی برگرداند (مثلاً get/getAll).
+ * حل‌شدن Promise همیشه با اتمام کامل تراکنش (oncomplete) هماهنگ است، نه با
+ * موفقیت تک‌تک درخواست‌ها؛ این‌طور چند put هم‌زمان (مثلاً روی meta و blobs) هم
+ * درست resolve می‌شوند. */
+function tx<T = void>(
+  storeNames: string | string[],
+  mode: IDBTransactionMode,
+  fn: (stores: Record<string, IDBObjectStore>) => IDBRequest<T> | void,
+): Promise<T> {
   return openDb().then(
     (db) =>
       new Promise<T>((resolve, reject) => {
-        const t = db.transaction(STORE, mode);
-        const req = fn(t.objectStore(STORE));
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error ?? new Error("خطای حافظه"));
-        t.oncomplete = () => db.close();
+        const names = Array.isArray(storeNames) ? storeNames : [storeNames];
+        const t = db.transaction(names, mode);
+        const stores: Record<string, IDBObjectStore> = {};
+        for (const n of names) stores[n] = t.objectStore(n);
+        let value: T | undefined;
+        const result = fn(stores);
+        if (result) {
+          result.onsuccess = () => {
+            value = result.result;
+          };
+          result.onerror = () => reject(result.error ?? new Error("خطای حافظه"));
+        }
+        t.oncomplete = () => {
+          db.close();
+          resolve(value as T);
+        };
+        t.onerror = () => reject(t.error ?? new Error("خطای حافظه"));
       }),
   );
 }
@@ -65,10 +123,12 @@ export function makeLibraryId() {
 
 export async function listLibrary(): Promise<LibraryMeta[]> {
   try {
-    const all = await tx<LibraryItem[]>("readonly", (s) => s.getAll() as IDBRequest<LibraryItem[]>);
-    return all
-      .map(({ blob: _blob, ...meta }) => meta)
-      .sort((a, b) => b.updatedAt - a.updatedAt);
+    const all = await tx<LibraryMeta[]>(
+      META_STORE,
+      "readonly",
+      (s) => s[META_STORE].getAll() as IDBRequest<LibraryMeta[]>,
+    );
+    return (all || []).sort((a, b) => b.updatedAt - a.updatedAt);
   } catch {
     return [];
   }
@@ -76,8 +136,20 @@ export async function listLibrary(): Promise<LibraryMeta[]> {
 
 export async function getLibraryItem(id: string): Promise<LibraryItem | null> {
   try {
-    const item = await tx<LibraryItem | undefined>("readonly", (s) => s.get(id) as IDBRequest<LibraryItem | undefined>);
-    return item ?? null;
+    const [meta, blobRec] = await Promise.all([
+      tx<LibraryMeta | undefined>(
+        META_STORE,
+        "readonly",
+        (s) => s[META_STORE].get(id) as IDBRequest<LibraryMeta | undefined>,
+      ),
+      tx<{ id: string; blob: Blob } | undefined>(
+        BLOB_STORE,
+        "readonly",
+        (s) => s[BLOB_STORE].get(id) as IDBRequest<{ id: string; blob: Blob } | undefined>,
+      ),
+    ]);
+    if (!meta || !blobRec) return null;
+    return { ...meta, blob: blobRec.blob };
   } catch {
     return null;
   }
@@ -85,21 +157,32 @@ export async function getLibraryItem(id: string): Promise<LibraryItem | null> {
 
 export async function putLibraryItem(item: LibraryItem): Promise<void> {
   try {
-    await tx("readwrite", (s) => s.put(item) as IDBRequest<IDBValidKey>);
+    const { blob, ...meta } = item;
+    await tx([META_STORE, BLOB_STORE], "readwrite", (s) => {
+      s[META_STORE].put(meta);
+      s[BLOB_STORE].put({ id: item.id, blob });
+    });
     await pruneLibrary();
   } catch {
     /* ignore */
   }
 }
 
+/** فقط متادیتا را آپدیت می‌کند — هرگز Blob فایل صوتی را دوباره نمی‌خواند/نمی‌نویسد. */
 export async function updateLibraryItem(
   id: string,
-  patch: Partial<Omit<LibraryItem, "id" | "blob">>,
+  patch: Partial<Omit<LibraryMeta, "id">>,
 ): Promise<void> {
   try {
-    const existing = await getLibraryItem(id);
+    const existing = await tx<LibraryMeta | undefined>(
+      META_STORE,
+      "readonly",
+      (s) => s[META_STORE].get(id) as IDBRequest<LibraryMeta | undefined>,
+    );
     if (!existing) return;
-    await tx("readwrite", (s) => s.put({ ...existing, ...patch, updatedAt: Date.now() }) as IDBRequest<IDBValidKey>);
+    await tx(META_STORE, "readwrite", (s) => {
+      s[META_STORE].put({ ...existing, ...patch, updatedAt: Date.now() });
+    });
   } catch {
     /* ignore */
   }
@@ -107,7 +190,10 @@ export async function updateLibraryItem(
 
 export async function deleteLibraryItem(id: string): Promise<void> {
   try {
-    await tx("readwrite", (s) => s.delete(id) as IDBRequest<undefined>);
+    await tx([META_STORE, BLOB_STORE], "readwrite", (s) => {
+      s[META_STORE].delete(id);
+      s[BLOB_STORE].delete(id);
+    });
   } catch {
     /* ignore */
   }
