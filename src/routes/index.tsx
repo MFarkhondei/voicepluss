@@ -26,11 +26,9 @@ import {
   X,
   Clock,
 } from "lucide-react";
-import { encodeWav, audioBufferToWav } from "@/lib/wav";
+import { encodeWav } from "@/lib/wav";
 import { toSrt, toTxt, downloadText, parseSrt } from "@/lib/subtitles";
 import { prepareAudioForTranscription, DEFAULT_PART_MINUTES } from "@/lib/splitAudio";
-import { extractPeaks } from "@/lib/waveform";
-import { Waveform } from "@/components/Waveform";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import {
   listLibrary,
@@ -304,8 +302,6 @@ function Index() {
     return "off";
   });
 
-  const [peaks, setPeaks] = useState<number[]>([]);
-  const [peaksLoading, setPeaksLoading] = useState(false);
   const [refining, setRefining] = useState(false);
   const [refineError, setRefineError] = useState<string | null>(null);
   const [diarize, setDiarize] = useState(false);
@@ -332,7 +328,6 @@ function Index() {
 
   const panelsRef = useRef<HTMLDivElement | null>(null);
   const textLockHRef = useRef<number | null>(null);
-  const peakJobRef = useRef(0);
   const currentItemIdRef = useRef<string | null>(null);
   const pendingSeekRef = useRef<number | null>(null);
   const pendingPlayRef = useRef(false);
@@ -340,12 +335,14 @@ function Index() {
   const seekCleanupRef = useRef<(() => void) | null>(null);
   const lastSavedTimeRef = useRef(0);
 
-  const setSourceFromBlob = useCallback((blob: Blob, opts?: { skipPeaks?: boolean; initialDuration?: number | null }) => {
+  const setSourceFromBlob = useCallback((blob: Blob, opts?: { initialDuration?: number | null }) => {
     if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
-    // Never rewrite a generic/unknown MIME type to a guessed container. Firefox is
-    // especially sensitive to a mismatched Blob MIME type. Keep the original Blob
-    // untouched and only use a real transcoded fallback when needed for playlist items.
-    const url = URL.createObjectURL(blob);
+    // Generic "audio/*" is not a valid media type for HTMLAudioElement in some browsers
+    let srcBlob = blob;
+    if ((blob.type || "").trim() === "audio/*") {
+      srcBlob = new Blob([blob], { type: "audio/webm" });
+    }
+    const url = URL.createObjectURL(srcBlob);
     audioUrlRef.current = url;
     loadGenRef.current += 1;
     setAudioUrl(url);
@@ -364,36 +361,6 @@ function Index() {
     playOnlyRef.current = false;
     repeatIdxRef.current = null;
     repeatDoneRef.current = 0;
-    const job = ++peakJobRef.current;
-    setPeaks([]);
-    if (opts?.skipPeaks) {
-      setPeaksLoading(false);
-      return;
-    }
-    setPeaksLoading(true);
-    void extractPeaks(blob, 160)
-      .then(({ peaks, duration: decodedDur }) => {
-        if (peakJobRef.current !== job) return;
-        setPeaks(peaks);
-        // decodeAudioData gives an exact duration without ever touching the
-        // playback element's currentTime (safe across browsers, incl. Firefox).
-        // Only use it to fill in what's still unknown — never override a value
-        // the <audio> element itself has already reported.
-        if (decodedDur > 0) setDuration((d) => (d > 0 ? d : decodedDur));
-      })
-      .finally(() => { if (peakJobRef.current === job) setPeaksLoading(false); });
-  }, []);
-
-  const loadPeaksFromBlob = useCallback((blob: Blob) => {
-    const job = ++peakJobRef.current;
-    setPeaksLoading(true);
-    void extractPeaks(blob, 160)
-      .then(({ peaks, duration: decodedDur }) => {
-        if (peakJobRef.current !== job) return;
-        setPeaks(peaks);
-        if (decodedDur > 0) setDuration((d) => (d > 0 ? d : decodedDur));
-      })
-      .finally(() => { if (peakJobRef.current === job) setPeaksLoading(false); });
   }, []);
 
   useEffect(() => () => { if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current); }, []);
@@ -430,46 +397,6 @@ function Index() {
     return id;
   }, [refreshLibrary]);
 
-  const prepareFirefoxPlaylistPlayback = useCallback(async (blob: Blob): Promise<{ blob: Blob; duration: number | null }> => {
-    const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
-    const isFirefox = /Firefox|FxiOS/i.test(ua);
-    const type = (blob.type || "").toLowerCase();
-    const needsFallback = isFirefox && (
-      type.includes("webm") ||
-      type.includes("ogg") ||
-      type.includes("opus") ||
-      type === "audio/*" ||
-      !type.startsWith("audio/")
-    );
-    if (!needsFallback) return { blob, duration: null };
-
-    try {
-      const OfflineCtor = (window as unknown as {
-        OfflineAudioContext?: typeof OfflineAudioContext;
-        webkitOfflineAudioContext?: typeof OfflineAudioContext;
-      }).OfflineAudioContext || (window as unknown as {
-        webkitOfflineAudioContext?: typeof OfflineAudioContext;
-      }).webkitOfflineAudioContext;
-      if (!OfflineCtor) return { blob, duration: null };
-
-      const ctx = new OfflineCtor(1, 1, 44100);
-      let arrayBuffer = await blob.arrayBuffer();
-      let decoded: AudioBuffer;
-      try {
-        decoded = await ctx.decodeAudioData(arrayBuffer);
-      } finally {
-        arrayBuffer = new ArrayBuffer(0);
-      }
-      const wav = audioBufferToWav(decoded);
-      const duration = decoded.duration > 0 ? decoded.duration : null;
-      return { blob: wav, duration };
-    } catch {
-      // If decoding/transcoding fails, fall back to the original file rather than
-      // blocking the playlist item completely.
-      return { blob, duration: null };
-    }
-  }, []);
-
   const openLibraryItem = useCallback(async (id: string) => {
     setLoadingItemId(id);
     try {
@@ -501,23 +428,11 @@ function Index() {
       pendingSeekRef.current = resume > 0 ? resume : null;
       lastSavedTimeRef.current = resume;
       pendingPlayRef.current = true;
-
-      // Firefox can prematurely stop some recorded WebM/Opus blobs when they are
-      // replayed directly from IndexedDB/Blob URLs (often after only a few seconds).
-      // For playlist playback only, convert those blobs to PCM WAV first. This also
-      // gives Firefox a reliable duration/seek index while keeping Chrome/Safari on
-      // the original file path.
-      const prepared = await prepareFirefoxPlaylistPlayback(item.blob);
-      const playbackDuration = knownDur ?? prepared.duration;
-      const playbackBlob = prepared.blob;
-
-      // skipPeaks: avoid concurrent decodeAudioData while HTMLAudioElement starts
-      setSourceFromBlob(playbackBlob, { skipPeaks: true, initialDuration: playbackDuration });
-      window.setTimeout(() => loadPeaksFromBlob(item.blob), 600);
+      setSourceFromBlob(item.blob, { initialDuration: knownDur });
     } finally {
       setLoadingItemId(null);
     }
-  }, [cancelJob, clearAnalysis, refreshLibrary, setSourceFromBlob, loadPeaksFromBlob, prepareFirefoxPlaylistPlayback]);
+  }, [cancelJob, clearAnalysis, refreshLibrary, setSourceFromBlob]);
 
   const removeLibraryItem = useCallback(async (id: string) => {
     await deleteLibraryItem(id);
@@ -720,17 +635,6 @@ function Index() {
     setCurrentTime(next);
   }, [clearMediaControlState, safeDuration]);
 
-  const seekRatio = useCallback((ratio: number) => {
-    const el = playerRef.current;
-    if (!el) return;
-    clearMediaControlState();
-    const total = safeDuration(el);
-    const r = Number.isFinite(ratio) ? Math.min(1, Math.max(0, ratio)) : 0;
-    const next = Math.max(0, Math.min(total, r * total));
-    try { el.currentTime = next; } catch { /* ignore */ }
-    setCurrentTime(next);
-  }, [clearMediaControlState, safeDuration]);
-
   const refineTranscript = useCallback(async () => {
     if (segments.length === 0 || refining) return;
     setRefining(true);
@@ -780,7 +684,7 @@ function Index() {
     cancelJob();
     const ac = new AbortController();
     abortRef.current = ac;
-    setSourceFromBlob(blob, { skipPeaks: true });
+    setSourceFromBlob(blob);
     setLoading(true);
     setError(null);
     setText("");
@@ -806,7 +710,6 @@ function Index() {
       }
       const { parts } = prepared;
       if (parts.length === 0) throw new Error("فایل صوتی خالی یا نامعتبر است.");
-      if (parts[0]?.blob) loadPeaksFromBlob(parts[0].blob);
       const allSegments: Segment[] = [];
       const textParts: string[] = [];
       const failed: string[] = [];
@@ -854,7 +757,7 @@ function Index() {
       setProgressLabel(null);
       if (abortRef.current === ac) abortRef.current = null;
     }
-  }, [language, cancelJob, clearAnalysis, setSourceFromBlob, loadPeaksFromBlob, rememberFile]);
+  }, [language, cancelJob, clearAnalysis, setSourceFromBlob, rememberFile]);
 
   // ذخیرهٔ خودکار متن و بخش‌ها روی آیتم فعلی پلی‌لیست
   useEffect(() => {
@@ -1335,20 +1238,6 @@ function Index() {
                 </select>
               </div>
 
-              <div className="mb-3">
-                <Waveform
-                  peaks={peaks}
-                  progress={duration > 0 ? Math.min(1, currentTime / duration) : 0}
-                  loading={peaksLoading}
-                  duration={duration}
-                  onSeek={seekRatio}
-                  onSkip={skip}
-                  skipSeconds={SKIP_SECONDS}
-                />
-                <p className="mt-1 text-center text-xs text-muted-foreground">
-                  وسط موج: پرش به زمان · سمت چپ: {SKIP_SECONDS}ث عقب · سمت راست / کلیک راست: {SKIP_SECONDS}ث جلو
-                </p>
-              </div>
               <div dir="ltr" className="mb-1 flex min-w-0 items-center gap-2 text-xs font-mono text-muted-foreground sm:gap-3">
                 <span className="w-9 shrink-0 tabular-nums sm:w-10">{formatTime(currentTime)}</span>
                 <input type="range" min={0} max={Number.isFinite(duration) && duration > 0 ? duration : 0} step={0.1} value={Number.isFinite(currentTime) ? Math.min(Math.max(0, currentTime), Number.isFinite(duration) && duration > 0 ? duration : 0) : 0} onInput={(e) => seekTo(Number((e.target as HTMLInputElement).value))} className="h-2 min-w-0 flex-1 cursor-pointer accent-primary" aria-label="موقعیت پخش" />
