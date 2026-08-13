@@ -18,7 +18,6 @@ import {
   Gauge,
   Search,
   ChevronDown,
-  Wand2,
   Keyboard,
   Languages,
   Repeat,
@@ -92,24 +91,6 @@ function sleep(ms: number) {
 
 function isLowConfidence(c?: number | null) {
   return typeof c === "number" && Number.isFinite(c) && c < LOW_CONFIDENCE;
-}
-
-function friendlyRefineError(raw: string): string {
-  const t = raw.toLowerCase();
-  if (
-    t.includes("rate limit") ||
-    t.includes("tokens per minute") ||
-    t.includes("tpm") ||
-    t.includes("429") ||
-    t.includes("محدودیت سرویس")
-  ) {
-    return "به علت محدودیت سرویس امکان اصلاح متن وجود ندارد. چند لحظه بعد دوباره تلاش کنید.";
-  }
-  if (t.includes("401") || t.includes("403") || t.includes("api key")) {
-    return "دسترسی به سرویس بهبود متن ممکن نیست. کلید سرویس را بررسی کنید.";
-  }
-  if (/[\u0600-\u06FF]/.test(raw) && raw.length < 200) return raw.replace(/^خطای بهبود متن:\s*/i, "");
-  return "خطا در بهبود متن. لطفاً دوباره تلاش کنید.";
 }
 
 async function transcribeOne(
@@ -222,9 +203,6 @@ function SegmentRow({
   return (
     <li ref={cardRef} aria-current={isActive ? "true" : undefined} className={`scroll-mt-4 rounded-xl border p-3 text-sm transition-colors ${baseClass}`}>
       <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-        {seg.speaker ? (
-          <p className="inline-flex items-center rounded-full bg-accent/15 px-2 py-0.5 text-xs font-bold text-accent">{seg.speaker}</p>
-        ) : null}
         {low ? (
           <p
             className="inline-flex items-center rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200"
@@ -313,9 +291,6 @@ function Index() {
     return "off";
   });
 
-  const [refining, setRefining] = useState(false);
-  const [refineError, setRefineError] = useState<string | null>(null);
-  const [diarize, setDiarize] = useState(false);
   const [status, setStatus] = useState("");
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [library, setLibrary] = useState<LibraryMeta[]>([]);
@@ -645,43 +620,6 @@ function Index() {
     try { el.currentTime = next; } catch { /* ignore */ }
     setCurrentTime(next);
   }, [clearMediaControlState, safeDuration]);
-
-  const refineTranscript = useCallback(async () => {
-    if (segments.length === 0 || refining) return;
-    setRefining(true);
-    setRefineError(null);
-    setStatus(diarize ? "در حال اصلاح املا، علائم و تفکیک گویندگان…" : "در حال اصلاح املا و علائم…");
-    try {
-      const res = await fetch("/api/refine", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          segments: segments.map((s, i) => ({ i, text: s.text })),
-          language,
-          diarize,
-        }),
-      });
-      let data: any;
-      try { data = await res.json(); } catch { throw new Error(`پاسخ نامعتبر از سرور (کد ${res.status})`); }
-      if (!res.ok) throw new Error(data?.error || `خطا در بهبود متن (${res.status})`);
-      const map = new Map<number, { text: string; speaker?: string | null }>(
-        (data.segments ?? []).map((s: any) => [Number(s.i), { text: String(s.text ?? ""), speaker: s.speaker ?? null }]),
-      );
-      const next = segments.map((s, i) => {
-        const r = map.get(i);
-        return r ? { ...s, text: r.text.trim() || s.text, speaker: r.speaker ?? null } : s;
-      });
-      setSegments(next);
-      setText(rebuildTextFromSegments(next));
-      setStatus("املا و علائم اصلاح شد.");
-    } catch (e) {
-      const raw = e instanceof Error ? e.message : "خطای ناشناخته در بهبود متن";
-      setRefineError(friendlyRefineError(raw));
-      setStatus("بهبود متن ناموفق بود.");
-    } finally {
-      setRefining(false);
-    }
-  }, [segments, refining, language, diarize, rebuildTextFromSegments]);
 
   const filteredSegments = useMemo(() => {
     let list = segments.map((s, i) => ({ s, i }));
@@ -1370,23 +1308,7 @@ function Index() {
             {onlyLowConfidence ? " (فقط اطمینان پایین)" : ""}
           </p>
         )}
-        {refineError && <p role="alert" className="mt-3 shrink-0 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{refineError}</p>}
         <div className="mt-4 flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
-          <label className="ml-auto inline-flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
-            <input type="checkbox" checked={diarize} onChange={(e) => setDiarize(e.target.checked)} className="size-4 accent-primary" />
-            تفکیک گویندگان
-          </label>
-          {!loading && (
-            <button
-              onClick={() => void refineTranscript()}
-              disabled={refining || segments.length === 0}
-              aria-label="اصلاح املا و علائم نگارشی"
-              className="inline-flex items-center gap-2 rounded-xl border border-accent/40 bg-accent/10 px-3.5 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/15 disabled:opacity-50"
-            >
-              {refining ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Wand2 className="size-4" aria-hidden="true" />}
-              {refining ? "در حال اصلاح…" : "اصلاح املا و علائم"}
-            </button>
-          )}
           {!loading && <button onClick={() => downloadSubtitle("srt")} aria-label="دانلود فایل زیرنویس SRT" className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary"><Download className="size-4" aria-hidden="true" /> SRT</button>}
           {!loading && <button onClick={() => downloadSubtitle("txt")} aria-label="دانلود فایل متنی TXT" className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary"><Download className="size-4" aria-hidden="true" /> TXT</button>}
           {!loading && <button onClick={() => void runAnalysis("quick")} disabled={analyzing || segments.length === 0} className="inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium transition-colors hover:bg-secondary disabled:opacity-50">{analyzing ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Sparkles className="size-4" aria-hidden="true" />}{analyzing ? "در حال تحلیل…" : "تحلیل متن"}</button>}
