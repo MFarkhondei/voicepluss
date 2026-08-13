@@ -1093,6 +1093,9 @@ function Index() {
                   const gen = loadGenRef.current;
                   pendingPlayRef.current = false;
                   const el = e.currentTarget;
+                  // Keep the selected repeat mode when playback is started from the playlist.
+                  // The previous implementation cleared the repeat chain here, so playlist
+                  // playback ignored the user's repeat selection until they pressed Play again.
                   stopAtRef.current = null;
                   playOnlyRef.current = false;
                   repeatIdxRef.current = null;
@@ -1114,6 +1117,20 @@ function Index() {
                   let startAt = 0;
                   if (seek != null && seek > 0) {
                     startAt = dur > 0 && seek >= dur - 1 ? 0 : seek;
+                  }
+
+                  // Playlist playback must honor the currently selected repeat mode.
+                  // Pick the segment containing the resume position (or the first segment)
+                  // and arm its stop boundary before autoplay starts.
+                  if (repeatMode !== "off" && segments.length > 0) {
+                    const repeatIndex = segments.findIndex((s) =>
+                      startAt >= s.start && startAt < s.end
+                    );
+                    const idx = repeatIndex >= 0 ? repeatIndex : 0;
+                    const s = segments[idx];
+                    repeatIdxRef.current = idx;
+                    repeatDoneRef.current = 0;
+                    stopAtRef.current = s.end;
                   }
 
                   try { el.playbackRate = playbackRate; } catch { /* ignore */ }
