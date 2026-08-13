@@ -974,6 +974,7 @@ function Index() {
       )}
 
       {error && <div className="min-w-0 whitespace-pre-wrap rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-[13px] text-destructive">{error}</div>}
+      <div className="lg:hidden">{renderDockedPlayer()}</div>
     </div>
   );
 
@@ -1139,7 +1140,9 @@ function Index() {
   );
 
 
-  const dockedPlayer = audioUrl && (
+  function renderDockedPlayer() {
+    if (!audioUrl) return null;
+    return (
     <div className="border-t border-border bg-surface/60 px-3.5 pb-1.5 pt-2.5">
       <audio
         ref={playerRef}
@@ -1364,7 +1367,8 @@ function Index() {
       </div>
 
     </div>
-  );
+    );
+  }
 
   const tabs: { id: "upload" | "playlist" | "text"; label: string; icon: typeof Upload }[] = [
     { id: "upload", label: "بارگذاری", icon: Upload },
@@ -1416,15 +1420,25 @@ function Index() {
           </ul>
         )}
 
-        <div className="min-h-[300px]">
-          {activeTab === "upload" && uploadPanel}
-          {activeTab === "playlist" && playlistPanel}
-          {activeTab === "text" && textPanel}
+        <div dir="ltr" className="min-h-[300px] lg:grid lg:grid-cols-3 lg:items-stretch lg:gap-0">
+          <section dir="rtl" aria-label="متن خروجی" className="hidden min-w-0 border-l border-border lg:order-1 lg:block">
+            {textPanel}
+          </section>
+          <section dir="rtl" aria-label="پلی‌لیست" className="hidden min-w-0 border-l border-border lg:order-2 lg:block">
+            {playlistPanel}
+          </section>
+          <section dir="rtl" aria-label="بارگذاری" className="hidden min-w-0 lg:order-3 lg:block">
+            {uploadPanel}
+            <div className="border-t border-border px-3.5 pb-3.5">{renderDockedPlayer()}</div>
+          </section>
+          <div className="lg:hidden">
+            {activeTab === "upload" && uploadPanel}
+            {activeTab === "playlist" && playlistPanel}
+            {activeTab === "text" && textPanel}
+          </div>
         </div>
 
-        {dockedPlayer}
-
-        <div className="flex border-t border-border">
+        <div className="flex border-t border-border lg:hidden">
           {tabs.map((t) => {
             const Icon = t.icon;
             const isActive = activeTab === t.id;
