@@ -21,6 +21,7 @@ import {
   Keyboard,
   Languages,
   Repeat,
+  Settings,
   ListMusic,
   X,
   Clock,
@@ -285,6 +286,7 @@ function Index() {
       return 1;
     }
   });
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [repeatMode, setRepeatMode] = useState<"off" | "inf" | "1" | "2" | "3" | "4" | "5">(() => {
     try {
       const v = localStorage.getItem("vp_repeatMode");
@@ -1306,36 +1308,6 @@ function Index() {
 
       <p className="mb-2 truncate text-[13px] font-medium">{fileName}</p>
 
-      <div className="mb-2.5 flex flex-wrap items-center justify-end gap-1.5">
-        <select
-          value={playbackRate}
-          onChange={(e) => setPlaybackRate(Number(e.target.value))}
-          className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] outline-none focus:ring-2 focus:ring-ring"
-          title="سرعت پخش"
-        >
-          {PLAYBACK_RATES.map((r) => <option key={r} value={r}>{r === 1 ? "عادی ×۱" : `×${r}`}</option>)}
-        </select>
-        <button type="button" onClick={() => { setRepeatMode("off"); repeatDoneRef.current = 0; }} aria-label="بازنشانی تکرار" title="بازنشانی تکرار" className="inline-flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary">
-          <Gauge className="size-3.5" aria-hidden="true" />
-        </button>
-        <select
-          value={repeatMode}
-          onChange={(e) => { setRepeatMode(e.target.value as typeof repeatMode); repeatDoneRef.current = 0; }}
-          className={`rounded-full border px-2.5 py-1 text-[11px] outline-none focus:ring-2 focus:ring-ring ${repeatMode !== "off" ? "border-accent/40 text-accent" : "border-border"}`}
-          title="تعداد تکرار هر بخش"
-        >
-          <option value="off">بدون تکرار</option>
-          <option value="2">۲ بار</option>
-          <option value="3">۳ بار</option>
-          <option value="4">۴ بار</option>
-          <option value="5">۵ بار</option>
-          <option value="inf">نامحدود</option>
-        </select>
-        <button type="button" aria-label="حالت تکرار" title="حالت تکرار" className="inline-flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary">
-          <Repeat className="size-3.5" aria-hidden="true" />
-        </button>
-      </div>
-
       <div dir="ltr" className="mb-2.5 flex items-center gap-2">
         <span className="w-9 shrink-0 text-[11px] tabular-nums text-accent">{formatTime(currentTime)}</span>
         <input
@@ -1352,6 +1324,56 @@ function Index() {
       </div>
 
       <div className="flex items-center justify-center gap-3.5 pb-2.5">
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setSettingsOpen((open) => !open)}
+            aria-label="تنظیمات پخش"
+            aria-expanded={settingsOpen}
+            title="تنظیمات پخش"
+            className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary"
+          >
+            <Settings className="size-4" aria-hidden="true" />
+          </button>
+          {settingsOpen && (
+            <div className="absolute bottom-full right-0 z-20 mb-2 w-52 rounded-2xl border border-border bg-card p-3 shadow-lg">
+              <div className="mb-2 text-[12px] font-medium">تنظیمات پخش</div>
+              <label className="mb-2 block text-[11px] text-muted-foreground">
+                سرعت پخش
+                <select
+                  value={playbackRate}
+                  onChange={(e) => setPlaybackRate(Number(e.target.value))}
+                  className="mt-1 w-full rounded-xl border border-border bg-card px-2.5 py-1.5 text-[11px] outline-none focus:ring-2 focus:ring-ring"
+                >
+                  {PLAYBACK_RATES.map((r) => <option key={r} value={r}>{r === 1 ? "عادی ×۱" : `×${r}`}</option>)}
+                </select>
+              </label>
+              <label className="block text-[11px] text-muted-foreground">
+                تعداد تکرار هر بخش
+                <select
+                  value={repeatMode}
+                  onChange={(e) => { setRepeatMode(e.target.value as typeof repeatMode); repeatDoneRef.current = 0; }}
+                  className={`mt-1 w-full rounded-xl border px-2.5 py-1.5 text-[11px] outline-none focus:ring-2 focus:ring-ring ${repeatMode !== "off" ? "border-accent/40 text-accent" : "border-border"}`}
+                >
+                  <option value="off">بدون تکرار</option>
+                  <option value="2">۲ بار</option>
+                  <option value="3">۳ بار</option>
+                  <option value="4">۴ بار</option>
+                  <option value="5">۵ بار</option>
+                  <option value="inf">نامحدود</option>
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={() => { setRepeatMode("off"); repeatDoneRef.current = 0; }}
+                className="mt-2 inline-flex w-full items-center justify-center gap-1 rounded-xl px-2 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-secondary"
+              >
+                <Gauge className="size-3.5" aria-hidden="true" />
+                بازنشانی تکرار
+              </button>
+            </div>
+          )}
+        </div>
         <button type="button" onClick={() => skip(SKIP_SECONDS)} aria-label={`${SKIP_SECONDS} ثانیه جلو`} className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-secondary">
           {SKIP_SECONDS}<SkipForward className="size-3.5" aria-hidden="true" />
         </button>
