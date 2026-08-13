@@ -1444,7 +1444,6 @@ function Index() {
         </div>
       </div>
 
-      <footer className="pt-1 text-center text-[11px] text-muted-foreground">VoicePluss — فایل‌ها فقط برای پردازش ارسال می‌شوند. از ویدیو فقط صوت استخراج می‌شود.</footer>
     </main>
   );
 }
