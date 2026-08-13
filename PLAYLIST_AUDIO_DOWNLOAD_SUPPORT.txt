@@ -1,0 +1,1 @@
+Playlist download now targets the actual audio file of each playlist item, not playlist metadata.

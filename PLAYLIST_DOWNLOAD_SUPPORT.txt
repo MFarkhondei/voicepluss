@@ -1,0 +1,1 @@
+Playlist download support added. The project now includes a downloadPlaylist(playlist, filename) helper that exports the current playlist as a JSON file.

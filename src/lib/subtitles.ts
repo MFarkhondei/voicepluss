@@ -1,3 +1,50 @@
+
+/* playlist-audio-download-support */
+async function downloadPlaylistAudio(audioUrl, filename = "audio") {
+  if (!audioUrl) return;
+  try {
+    const response = await fetch(audioUrl);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objectUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  } catch (error) {
+    // Fallback for sources that cannot be fetched due to browser/CORS restrictions.
+    const a = document.createElement("a");
+    a.href = audioUrl;
+    a.download = filename;
+    a.target = "_blank";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+}
+
+
+/* playlist-download-support */
+function downloadPlaylist(playlist, filename = "playlist.json") {
+  try {
+    const data = JSON.stringify(playlist, null, 2);
+    const blob = new Blob([data], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error("Playlist download failed:", e);
+  }
+}
+
 export type Segment = { start: number; end: number; text: string };
 
 function pad(n: number, len = 2) {
