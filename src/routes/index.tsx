@@ -674,6 +674,13 @@ function Index() {
     }
   }, []);
 
+  const playAfterUserSeek = useCallback((el: HTMLAudioElement) => {
+    // Waveform/range/skip interactions are explicit user gestures. Starting here
+    // (rather than from a later media event) satisfies Firefox autoplay policy.
+    if (el.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
+    void el.play().catch(() => setPlaying(false));
+  }, []);
+
   const skip = useCallback((delta: number) => {
     const el = playerRef.current;
     if (!el) return;
@@ -682,7 +689,8 @@ function Index() {
     const next = Math.max(0, Math.min(total, (el.currentTime || 0) + delta));
     setMediaTime(el, next);
     setCurrentTime(next);
-  }, [clearMediaControlState, safeDuration, setMediaTime]);
+    playAfterUserSeek(el);
+  }, [clearMediaControlState, safeDuration, setMediaTime, playAfterUserSeek]);
 
   const seekTo = useCallback((time: number) => {
     const el = playerRef.current;
@@ -693,7 +701,8 @@ function Index() {
     const next = Math.max(0, Math.min(total, Number.isFinite(t) ? t : 0));
     setMediaTime(el, next);
     setCurrentTime(next);
-  }, [clearMediaControlState, safeDuration, setMediaTime]);
+    playAfterUserSeek(el);
+  }, [clearMediaControlState, safeDuration, setMediaTime, playAfterUserSeek]);
 
   const seekRatio = useCallback((ratio: number) => {
     const el = playerRef.current;
@@ -704,7 +713,8 @@ function Index() {
     const next = Math.max(0, Math.min(total, r * total));
     setMediaTime(el, next);
     setCurrentTime(next);
-  }, [clearMediaControlState, safeDuration, setMediaTime]);
+    playAfterUserSeek(el);
+  }, [clearMediaControlState, safeDuration, setMediaTime, playAfterUserSeek]);
 
   const refineTranscript = useCallback(async () => {
     if (segments.length === 0 || refining) return;
