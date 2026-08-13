@@ -303,6 +303,7 @@ function Index() {
   const [library, setLibrary] = useState<LibraryMeta[]>([]);
   const [currentItemId, setCurrentItemId] = useState<string | null>(null);
   const [loadingItemId, setLoadingItemId] = useState<string | null>(null);
+  const [downloadingItemId, setDownloadingItemId] = useState<string | null>(null);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -433,6 +434,24 @@ function Index() {
     if (currentItemIdRef.current === id) { currentItemIdRef.current = null; setCurrentItemId(null); }
     await refreshLibrary();
   }, [refreshLibrary]);
+
+  const downloadLibraryAudio = useCallback(async (id: string, name: string) => {
+    setDownloadingItemId(id);
+    try {
+      const item = await getLibraryItem(id);
+      if (!item) return;
+      const url = URL.createObjectURL(item.blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } finally {
+      setDownloadingItemId(null);
+    }
+  }, []);
 
   const rememberProgress = useCallback((time: number) => {
     const id = currentItemIdRef.current;
@@ -1015,6 +1034,16 @@ function Index() {
                         )}
                       </span>
                     </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void downloadLibraryAudio(item.id, item.name)}
+                    disabled={downloadingItemId === item.id}
+                    className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent/10 hover:text-accent disabled:opacity-60"
+                    aria-label={`دانلود فایل صوتی ${item.name}`}
+                    title="دانلود فایل صوتی"
+                  >
+                    {downloadingItemId === item.id ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Download className="size-4" aria-hidden="true" />}
                   </button>
                   <button
                     type="button"
