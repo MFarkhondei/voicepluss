@@ -194,6 +194,8 @@ function SegmentRow({
   const translate = useCallback(async () => {
     const value = draft.trim();
     if (!value || translating) return;
+    // Stop audio playback immediately when the translate button is pressed.
+    onEditStart?.();
     setTranslating(true);
     setTranslateError(null);
     try {
@@ -210,7 +212,7 @@ function SegmentRow({
     } finally {
       setTranslating(false);
     }
-  }, [draft, translating]);
+  }, [draft, translating, onEditStart]);
 
   const baseClass = isActive
     ? "border-primary bg-primary/10 ring-1 ring-primary/40"
