@@ -329,7 +329,16 @@ function Index() {
   const mediaReadyRef = useRef(false);
 
   const setSourceFromBlob = useCallback((blob: Blob, opts?: { skipPeaks?: boolean; initialDuration?: number | null }) => {
-    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+    const previousUrl = audioUrlRef.current;
+    const currentPlayer = playerRef.current;
+    if (currentPlayer) {
+      currentPlayer.pause();
+      currentPlayer.removeAttribute("src");
+      // Firefox can keep the old Blob resource alive until load() explicitly
+      // detaches it. Revoking first may poison the next source on the same element.
+      currentPlayer.load();
+    }
+    if (previousUrl) URL.revokeObjectURL(previousUrl);
     // Generic "audio/*" is not a valid media type for HTMLAudioElement in some browsers
     let srcBlob = blob;
     if ((blob.type || "").trim() === "audio/*") {
