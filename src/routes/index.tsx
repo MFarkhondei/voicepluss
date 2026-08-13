@@ -32,6 +32,7 @@ import { encodeWav } from "@/lib/wav";
 import { toSrt, toTxt, downloadText, parseSrt } from "@/lib/subtitles";
 import { prepareAudioForTranscription, DEFAULT_PART_MINUTES } from "@/lib/splitAudio";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   listLibrary,
   getLibraryItem,
@@ -295,6 +296,7 @@ function Index() {
     return "off";
   });
 
+  const isMobile = useIsMobile();
   const [status, setStatus] = useState("");
   const [activeTab, setActiveTab] = useState<"upload" | "playlist" | "text">("upload");
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -1395,7 +1397,7 @@ function Index() {
   ];
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full min-w-0 max-w-md flex-col gap-3 px-2.5 py-6 sm:py-10">
+    <main className={`mx-auto flex min-h-dvh w-full min-w-0 flex-col gap-3 px-2.5 py-6 sm:py-10 ${isMobile ? "max-w-md" : "max-w-6xl"}`}>
       <a href="#vp-app" className="sr-only-focusable rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">پرش به برنامه</a>
       <p aria-live="polite" className="sr-only">{status}</p>
 
@@ -1438,32 +1440,45 @@ function Index() {
           </ul>
         )}
 
-        <div className="min-h-[300px]">
-          {activeTab === "upload" && uploadPanel}
-          {activeTab === "playlist" && playlistPanel}
-          {activeTab === "text" && textPanel}
-        </div>
+        {isMobile ? (
+          <>
+            <div className="min-h-[300px]">
+              {activeTab === "upload" && uploadPanel}
+              {activeTab === "playlist" && playlistPanel}
+              {activeTab === "text" && textPanel}
+            </div>
 
-        {dockedPlayer}
+            {dockedPlayer}
 
-        <div className="flex border-t border-border">
-          {tabs.map((t) => {
-            const Icon = t.icon;
-            const isActive = activeTab === t.id;
-            return (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setActiveTab(t.id)}
-                aria-current={isActive ? "true" : undefined}
-                className={`flex flex-1 flex-col items-center gap-0.5 py-2.5 transition-colors ${isActive ? "text-accent" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                <Icon className="size-[19px]" aria-hidden="true" />
-                <span className="text-[11px]">{t.label}</span>
-              </button>
-            );
-          })}
-        </div>
+            <div className="flex border-t border-border">
+              {tabs.map((t) => {
+                const Icon = t.icon;
+                const isActive = activeTab === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setActiveTab(t.id)}
+                    aria-current={isActive ? "true" : undefined}
+                    className={`flex flex-1 flex-col items-center gap-0.5 py-2.5 transition-colors ${isActive ? "text-accent" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    <Icon className="size-[19px]" aria-hidden="true" />
+                    <span className="text-[11px]">{t.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <div className="grid grid-cols-3 items-start">
+            <div className="min-h-[420px] min-w-0 overflow-y-auto">{uploadPanel}</div>
+            <div className="flex min-h-[420px] min-w-0 flex-col border-s border-border">
+              <div className="flex-1 overflow-y-auto">{playlistPanel}</div>
+              {dockedPlayer}
+            </div>
+            <div className="min-h-[420px] min-w-0 overflow-y-auto border-s border-border">{textPanel}</div>
+          </div>
+        )}
       </div>
 
     </main>
