@@ -118,6 +118,10 @@
   --sidebar-accent-foreground: oklch(0.99 0.004 90);
   --sidebar-border: oklch(0.281 0.041 254.8 / 10%);
   --sidebar-ring: oklch(0.657 0.111 75.8);
+
+  --scrollbar-thumb: oklch(0.281 0.041 254.8 / 22%);
+  --scrollbar-thumb-hover: oklch(0.281 0.041 254.8 / 38%);
+  color-scheme: light;
 }
 
 .dark {
@@ -157,6 +161,10 @@
   --sidebar-accent-foreground: oklch(0.2 0.035 255);
   --sidebar-border: oklch(1 0 0 / 9%);
   --sidebar-ring: oklch(0.72 0.11 78);
+
+  --scrollbar-thumb: oklch(1 0 0 / 22%);
+  --scrollbar-thumb-hover: oklch(1 0 0 / 34%);
+  color-scheme: dark;
 }
 
 
@@ -282,6 +290,32 @@
 }
 .sr-only-focusable:focus {
   top: 0.5rem;
+}
+
+/* ---- اسکرول‌بار هماهنگ با تم (روشن/تاریک) ---- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1325,8 +1325,20 @@ function Index() {
         <span className="w-9 shrink-0 text-end text-[11px] tabular-nums text-accent">{formatTime(duration)}</span>
       </div>
 
-      <div className="flex items-center justify-center gap-3.5 pb-2.5">
-        <div className="relative">
+      <div className="relative flex items-center justify-center pb-2.5">
+        <div className="flex items-center justify-center gap-3.5">
+          <button type="button" onClick={() => skip(SKIP_SECONDS)} aria-label={`${SKIP_SECONDS} ثانیه جلو`} className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-secondary">
+            {SKIP_SECONDS}<SkipForward className="size-3.5" aria-hidden="true" />
+          </button>
+          <button type="button" onClick={togglePlay} aria-label={playing ? "توقف" : "پخش"} className="inline-flex size-11 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90">
+            {playing ? <Pause className="size-5" aria-hidden="true" /> : <Play className="ml-0.5 size-5" aria-hidden="true" />}
+          </button>
+          <button type="button" onClick={() => skip(-SKIP_SECONDS)} aria-label={`${SKIP_SECONDS} ثانیه عقب`} className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-secondary">
+            <SkipBack className="size-3.5" aria-hidden="true" />{SKIP_SECONDS}
+          </button>
+        </div>
+
+        <div className="absolute right-0 top-1/2 -translate-y-1/2">
           <button
             type="button"
             onClick={() => setSettingsOpen((open) => !open)}
@@ -1376,15 +1388,6 @@ function Index() {
             </div>
           )}
         </div>
-        <button type="button" onClick={() => skip(SKIP_SECONDS)} aria-label={`${SKIP_SECONDS} ثانیه جلو`} className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-secondary">
-          {SKIP_SECONDS}<SkipForward className="size-3.5" aria-hidden="true" />
-        </button>
-        <button type="button" onClick={togglePlay} aria-label={playing ? "توقف" : "پخش"} className="inline-flex size-11 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90">
-          {playing ? <Pause className="size-5" aria-hidden="true" /> : <Play className="ml-0.5 size-5" aria-hidden="true" />}
-        </button>
-        <button type="button" onClick={() => skip(-SKIP_SECONDS)} aria-label={`${SKIP_SECONDS} ثانیه عقب`} className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-secondary">
-          <SkipBack className="size-3.5" aria-hidden="true" />{SKIP_SECONDS}
-        </button>
       </div>
 
     </div>
