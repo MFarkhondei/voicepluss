@@ -173,7 +173,7 @@ function SegmentRow({
     const el = taRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.max(el.scrollHeight, 72)}px`;
+    el.style.height = `${el.scrollHeight}px`;
   }, [draft]);
 
   const translate = useCallback(async () => {
@@ -234,7 +234,7 @@ function SegmentRow({
           </button>
         </div>
         <div className="min-w-0 flex-1">
-          <textarea ref={taRef} value={draft} aria-label={`متن بخش ${index + 1} از دقیقه ${formatTime(seg.start)}`} onFocus={() => { onEditStart?.(); setEditing(true); }} onChange={(e) => { setDraft(e.target.value); onChange(index, e.target.value); }} onBlur={() => setEditing(false)} rows={3} wrap="soft" style={{ minHeight: "72px" }} className="block w-full resize-none overflow-hidden rounded-lg border border-transparent bg-transparent p-1.5 text-right text-sm leading-6 outline-none focus:overflow-x-auto focus:border-border focus:bg-card focus:ring-2 focus:ring-ring" dir="rtl" />
+          <textarea ref={taRef} value={draft} aria-label={`متن بخش ${index + 1} از دقیقه ${formatTime(seg.start)}`} onFocus={() => { onEditStart?.(); setEditing(true); }} onChange={(e) => { setDraft(e.target.value); onChange(index, e.target.value); }} onBlur={() => setEditing(false)} rows={1} wrap="soft" className="block w-full resize-none overflow-hidden rounded-lg border border-transparent bg-transparent p-1.5 text-right text-sm leading-6 outline-none focus:overflow-x-auto focus:border-border focus:bg-card focus:ring-2 focus:ring-ring" dir="rtl" />
           {translation ? (
             <p dir="rtl" className="mt-1.5 rounded-lg border border-accent/30 bg-accent/10 p-2 text-right text-sm leading-7">{translation}</p>
           ) : null}
@@ -1138,7 +1138,7 @@ function Index() {
               {onlyLowConfidence && !segmentQuery.trim() ? "بخشی با اطمینان پایین یافت نشد." : "موردی یافت نشد."}
             </p>
           ) : (
-            <ul ref={listRef} className="flex min-w-0 flex-col gap-1.5">
+            <ul ref={listRef} className="flex max-h-[13rem] min-w-0 flex-col gap-1.5 overflow-y-auto overflow-x-hidden">
               {filteredSegments.map(({ s, i }) => (
                 <SegmentRow
                   key={i}
