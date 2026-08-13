@@ -173,7 +173,7 @@ function SegmentRow({
     const el = taRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
+    el.style.height = `${Math.max(el.scrollHeight, 72)}px`;
   }, [draft]);
 
   const translate = useCallback(async () => {
@@ -218,14 +218,14 @@ function SegmentRow({
       </div>
       <div className="flex min-w-0 items-start gap-2 sm:gap-3">
         <div className="flex shrink-0 flex-col items-center gap-1.5">
-          <button type="button" onClick={() => onSeek(seg.start)} aria-label={`پرش به دقیقه ${formatTime(seg.start)}`} className="pt-1.5 font-mono text-xs text-muted-foreground hover:text-primary focus-visible:ring-2 focus-visible:ring-ring" title="پرش به این بخش">{formatTime(seg.start)}</button>
+          <button type="button" onClick={() => onSeek(seg.start)} aria-label={`پرش به دقیقه ${formatTime(seg.start)}`} className="pt-1 font-mono text-xs text-muted-foreground hover:text-primary focus-visible:ring-2 focus-visible:ring-ring" title="پرش به این بخش">{formatTime(seg.start)}</button>
           <button
             type="button"
-            onClick={() => isPlaying ? onTogglePlay() : onPlayOnly(seg, index)}
+            onClick={() => (isPlaying ? onTogglePlay() : onPlayOnly(seg, index))}
             disabled={!hasAudio}
-            aria-label={isPlaying ? "توقف پخش" : "فقط همین متن پخش شود"}
+            aria-label={isPlaying ? "توقف پخش" : "پخش متن جاری"}
             className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
-            title={isPlaying ? "توقف پخش" : "فقط همین متن پخش شود"}
+            title={isPlaying ? "توقف پخش" : "پخش متن جاری"}
           >
             {isPlaying ? <Pause className="size-4" aria-hidden="true" /> : <Play className="size-4" aria-hidden="true" />}
           </button>
@@ -234,7 +234,7 @@ function SegmentRow({
           </button>
         </div>
         <div className="min-w-0 flex-1">
-          <textarea ref={taRef} value={draft} aria-label={`متن بخش ${index + 1} از دقیقه ${formatTime(seg.start)}`} onFocus={() => { onEditStart?.(); setEditing(true); }} onChange={(e) => { setDraft(e.target.value); onChange(index, e.target.value); }} onBlur={() => setEditing(false)} rows={1} wrap="soft" className="block w-full resize-none overflow-hidden rounded-lg border border-transparent bg-transparent p-1.5 text-right text-sm leading-6 outline-none focus:overflow-x-auto focus:border-border focus:bg-card focus:ring-2 focus:ring-ring" dir="rtl" />
+          <textarea ref={taRef} value={draft} aria-label={`متن بخش ${index + 1} از دقیقه ${formatTime(seg.start)}`} onFocus={() => { onEditStart?.(); setEditing(true); }} onChange={(e) => { setDraft(e.target.value); onChange(index, e.target.value); }} onBlur={() => setEditing(false)} rows={3} wrap="soft" style={{ minHeight: "72px" }} className="block w-full resize-none overflow-hidden rounded-lg border border-transparent bg-transparent p-1.5 text-right text-sm leading-6 outline-none focus:overflow-x-auto focus:border-border focus:bg-card focus:ring-2 focus:ring-ring" dir="rtl" />
           {translation ? (
             <p dir="rtl" className="mt-1.5 rounded-lg border border-accent/30 bg-accent/10 p-2 text-right text-sm leading-7">{translation}</p>
           ) : null}
@@ -514,9 +514,10 @@ function Index() {
 
   useEffect(() => {
     if (activeSegmentIndex < 0) return;
+    const list = listRef.current;
     const card = activeCardRef.current;
-    if (!card) return;
-    card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    if (!list || !card) return;
+    list.scrollTo({ top: Math.max(0, card.offsetTop - list.offsetTop - 8), behavior: "smooth" });
   }, [activeSegmentIndex]);
 
   useLayoutEffect(() => {
@@ -568,6 +569,17 @@ function Index() {
     repeatDoneRef.current = 0;
     playFrom(s.start, s.end);
   }, [playFrom]);
+  const playSegmentContinue = useCallback((s: Segment, i?: number) => {
+    playOnlyRef.current = false;
+    if (repeatMode !== "off" && typeof i === "number") {
+      repeatIdxRef.current = i;
+      repeatDoneRef.current = 0;
+      playFrom(s.start, s.end);
+      return;
+    }
+    repeatIdxRef.current = null;
+    playFrom(s.start, null);
+  }, [playFrom, repeatMode]);
   const togglePlay = useCallback(() => {
     const el = playerRef.current;
     if (!el || !audioUrl) return;
@@ -635,17 +647,29 @@ function Index() {
     setCurrentTime(next);
   }, [clearMediaControlState, safeDuration]);
 
-  const goToNextSegment = useCallback(() => {
+  const goToSegment = useCallback((delta: number) => {
     if (segments.length === 0) return;
-    const idx = activeSegmentIndex < 0 ? 0 : Math.min(segments.length - 1, activeSegmentIndex + 1);
-    seekTo(segments[idx].start);
-  }, [segments, activeSegmentIndex, seekTo]);
+    const cur = activeSegmentIndex;
+    const nextIdx = cur < 0
+      ? (delta > 0 ? 0 : segments.length - 1)
+      : Math.min(segments.length - 1, Math.max(0, cur + delta));
+    const seg = segments[nextIdx];
+    if (!seg) return;
+    if (playing) playSegmentContinue(seg, nextIdx);
+    else seekTo(seg.start);
+  }, [segments, activeSegmentIndex, playing, playSegmentContinue, seekTo]);
 
-  const goToPrevSegment = useCallback(() => {
+  const goToAdjacentSegment = useCallback((direction: 1 | -1) => {
     if (segments.length === 0) return;
-    const idx = activeSegmentIndex <= 0 ? 0 : activeSegmentIndex - 1;
-    seekTo(segments[idx].start);
-  }, [segments, activeSegmentIndex, seekTo]);
+    const cur = activeSegmentIndex;
+    const idx = cur < 0
+      ? (direction > 0 ? 0 : segments.length - 1)
+      : Math.max(0, Math.min(segments.length - 1, cur + direction));
+    const s = segments[idx];
+    if (!s) return;
+    if (playing) playSegmentContinue(s, idx);
+    else seekTo(s.start);
+  }, [segments, activeSegmentIndex, playing, playSegmentContinue, seekTo]);
 
   const filteredSegments = useMemo(() => {
     let list = segments.map((s, i) => ({ s, i }));
@@ -1354,13 +1378,13 @@ function Index() {
 
       <div className="relative flex items-center justify-center pb-2.5">
         <div className="flex items-center justify-center gap-3.5">
-          <button type="button" onClick={goToNextSegment} disabled={segments.length === 0} aria-label="متن بعدی" title="متن بعدی" className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-secondary disabled:opacity-40">
+          <button type="button" onClick={() => goToSegment(1)} disabled={segments.length === 0} aria-label="بخش بعدی" title="بخش بعدی" className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-secondary disabled:opacity-40">
             <SkipForward className="size-3.5" aria-hidden="true" />
           </button>
           <button type="button" onClick={togglePlay} aria-label={playing ? "توقف" : "پخش"} className="inline-flex size-11 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90">
             {playing ? <Pause className="size-5" aria-hidden="true" /> : <Play className="ml-0.5 size-5" aria-hidden="true" />}
           </button>
-          <button type="button" onClick={goToPrevSegment} disabled={segments.length === 0} aria-label="متن قبلی" title="متن قبلی" className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-secondary disabled:opacity-40">
+          <button type="button" onClick={() => goToSegment(-1)} disabled={segments.length === 0} aria-label="بخش قبلی" title="بخش قبلی" className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-secondary disabled:opacity-40">
             <SkipBack className="size-3.5" aria-hidden="true" />
           </button>
         </div>
@@ -1506,7 +1530,7 @@ function Index() {
               <div className="flex-1 overflow-y-auto">{playlistPanel}</div>
               {dockedPlayer}
             </div>
-            <div className="min-h-[420px] min-w-0 overflow-y-auto border-s border-border">{textPanel}</div>
+            <div className="max-h-[420px] min-w-0 overflow-y-auto border-s border-border">{textPanel}</div>
           </div>
         )}
       </div>
