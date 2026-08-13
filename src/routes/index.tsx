@@ -299,7 +299,7 @@ function Index() {
   const [repeatMode, setRepeatMode] = useState<"off" | "inf" | "1" | "2" | "3" | "4" | "5">(() => {
     try {
       const v = localStorage.getItem("vp_repeatMode");
-      if (v === "off" || v === "inf" || ["1","2","3","4","5"].includes(v)) return v as any;
+      if (v && (v === "off" || v === "inf" || ["1", "2", "3", "4", "5"].includes(v))) return v as any;
     } catch {}
     return "off";
   });
