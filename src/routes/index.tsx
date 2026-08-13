@@ -658,15 +658,31 @@ function Index() {
     return d1 || d2 || 0;
   }, [duration]);
 
+  const setMediaTime = useCallback((el: HTMLAudioElement, next: number) => {
+    // Firefox may ignore currentTime assignments made before Blob metadata is
+    // available. Keep the requested time and apply it from loadedmetadata.
+    if (el.readyState < HTMLMediaElement.HAVE_METADATA) {
+      pendingSeekRef.current = next;
+      el.load();
+      return;
+    }
+    try {
+      el.currentTime = next;
+    } catch {
+      pendingSeekRef.current = next;
+      el.load();
+    }
+  }, []);
+
   const skip = useCallback((delta: number) => {
     const el = playerRef.current;
     if (!el) return;
     clearMediaControlState();
     const total = safeDuration(el);
     const next = Math.max(0, Math.min(total, (el.currentTime || 0) + delta));
-    try { el.currentTime = next; } catch { /* ignore */ }
+    setMediaTime(el, next);
     setCurrentTime(next);
-  }, [clearMediaControlState, safeDuration]);
+  }, [clearMediaControlState, safeDuration, setMediaTime]);
 
   const seekTo = useCallback((time: number) => {
     const el = playerRef.current;
@@ -675,9 +691,9 @@ function Index() {
     const total = safeDuration(el);
     const t = Number(time);
     const next = Math.max(0, Math.min(total, Number.isFinite(t) ? t : 0));
-    try { el.currentTime = next; } catch { /* ignore */ }
+    setMediaTime(el, next);
     setCurrentTime(next);
-  }, [clearMediaControlState, safeDuration]);
+  }, [clearMediaControlState, safeDuration, setMediaTime]);
 
   const seekRatio = useCallback((ratio: number) => {
     const el = playerRef.current;
@@ -686,9 +702,9 @@ function Index() {
     const total = safeDuration(el);
     const r = Number.isFinite(ratio) ? Math.min(1, Math.max(0, ratio)) : 0;
     const next = Math.max(0, Math.min(total, r * total));
-    try { el.currentTime = next; } catch { /* ignore */ }
+    setMediaTime(el, next);
     setCurrentTime(next);
-  }, [clearMediaControlState, safeDuration]);
+  }, [clearMediaControlState, safeDuration, setMediaTime]);
 
   const refineTranscript = useCallback(async () => {
     if (segments.length === 0 || refining) return;
