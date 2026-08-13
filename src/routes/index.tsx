@@ -168,11 +168,11 @@ async function transcribeOne(
 }
 
 function SegmentRow({
-  seg, index, isActive, hasAudio, cardRef, onSeek, onPlayOnly, onPlayContinue, onChange, onEditStart,
+  seg, index, isActive, isPlaying, hasAudio, cardRef, onSeek, onPlayOnly, onPlayContinue, onTogglePlay, onChange, onEditStart,
 }: {
-  seg: Segment; index: number; isActive: boolean; hasAudio: boolean;
+  seg: Segment; index: number; isActive: boolean; isPlaying: boolean; hasAudio: boolean;
   cardRef?: (el: HTMLLIElement | null) => void;
-  onSeek: (t: number) => void; onPlayOnly: (s: Segment, i: number) => void; onPlayContinue: (s: Segment, i: number) => void;
+  onSeek: (t: number) => void; onPlayOnly: (s: Segment, i: number) => void; onPlayContinue: (s: Segment, i: number) => void; onTogglePlay: () => void;
   onChange: (index: number, value: string) => void;
   onEditStart?: () => void;
 }) {
@@ -245,7 +245,16 @@ function SegmentRow({
         </div>
         <div className="flex shrink-0 flex-col gap-1.5">
           <button type="button" onClick={() => onPlayOnly(seg, index)} disabled={!hasAudio} aria-label="فقط همین متن پخش شود" className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40" title="فقط همین متن پخش شود"><Play className="size-4" aria-hidden="true" /></button>
-          <button type="button" onClick={() => onPlayContinue(seg, index)} disabled={!hasAudio} aria-label="از این متن به بعد پخش شود" className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40" title="از این متن به بعد پخش شود"><SkipForward className="size-4" aria-hidden="true" /></button>
+          <button
+            type="button"
+            onClick={() => isPlaying ? onTogglePlay() : onPlayContinue(seg, index)}
+            disabled={!hasAudio}
+            aria-label={isPlaying ? "توقف پخش" : "از این متن به بعد پخش شود"}
+            className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
+            title={isPlaying ? "توقف پخش" : "از این متن به بعد پخش شود"}
+          >
+            {isPlaying ? <Pause className="size-4" aria-hidden="true" /> : <SkipForward className="size-4" aria-hidden="true" />}
+          </button>
           <button type="button" onClick={() => void translate()} disabled={translating || !draft.trim()} aria-label="ترجمه به فارسی" className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-card transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40" title="ترجمه به فارسی">
             {translating ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Languages className="size-4" aria-hidden="true" />}
           </button>
@@ -1332,7 +1341,7 @@ function Index() {
         ) : (
           <ul ref={listRef} className={`min-h-0 min-w-0 space-y-2 overflow-y-auto overflow-x-hidden ${isDesktop && textLockH ? "flex-1" : "max-h-[22rem]"}`}>
             {filteredSegments.map(({ s, i }) => (
-              <SegmentRow key={i} seg={s} index={i} isActive={i === activeSegmentIndex} hasAudio={!!audioUrl} cardRef={i === activeSegmentIndex ? (el) => { activeCardRef.current = el; } : undefined} onSeek={seekTo} onPlayOnly={playSegmentOnly} onPlayContinue={playSegmentContinue} onChange={updateSegmentText} onEditStart={pauseForEdit} />
+              <SegmentRow key={i} seg={s} index={i} isActive={i === activeSegmentIndex} isPlaying={playing && i === activeSegmentIndex} hasAudio={!!audioUrl} cardRef={i === activeSegmentIndex ? (el) => { activeCardRef.current = el; } : undefined} onSeek={seekTo} onPlayOnly={playSegmentOnly} onPlayContinue={playSegmentContinue} onTogglePlay={togglePlay} onChange={updateSegmentText} onEditStart={pauseForEdit} />
             ))}
           </ul>
         )}
