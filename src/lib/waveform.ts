@@ -1,12 +1,22 @@
 /** استخراج پیک‌های دامنهٔ صوت برای رسم waveform.
  * برای فایل‌های بزرگ دیکود کامل انجام نمی‌شود تا تب کروم کرش نکند.
  * دیکود واقعی (decodeAudioData) مدت زمان دقیق فایل را هم به‌دست می‌دهد —
- * بدون نیاز به seek کردن روی خود عنصر <audio> پخش (که در فایرفاکس مشکل‌ساز است). */
+ * بدون نیاز به seek کردن روی خود عنصر <audio> پخش (که در فایرفاکس مشکل‌ساز است).
+ * دیکود با OfflineAudioContext انجام می‌شود، نه AudioContext زنده: چون
+ * OfflineAudioContext هرگز به خروجی صوتی واقعی دستگاه وصل نمی‌شود، ساختنش
+ * باعث قطع/توقف پخش هم‌زمان عنصر <audio> دیگر نمی‌شود (که با AudioContext
+ * زنده در برخی مرورگرها/سیستم‌عامل‌ها پیش می‌آمد — دقیقاً همان «۳ ثانیه پخش
+ * می‌شود و ادامه نمی‌دهد»). */
 
 /** بالای این حجم: فقط الگوی تقریبی (بدون decodeAudioData) */
 const MAX_DECODE_BYTES = 6 * 1024 * 1024;
 
 export type PeaksResult = { peaks: number[]; duration: number };
+
+function getOfflineAudioContextCtor(): typeof OfflineAudioContext | null {
+  const w = window as unknown as { OfflineAudioContext?: typeof OfflineAudioContext; webkitOfflineAudioContext?: typeof OfflineAudioContext };
+  return w.OfflineAudioContext || w.webkitOfflineAudioContext || null;
+}
 
 export async function extractPeaks(blob: Blob, barCount = 120): Promise<PeaksResult> {
   // فایل بزرگ / ویدیو: دیکود دوباره = کرش حافظه (Aw, Snap!)
@@ -16,7 +26,10 @@ export async function extractPeaks(blob: Blob, barCount = 120): Promise<PeaksRes
 
   try {
     const arrayBuffer = await blob.arrayBuffer();
-    const ctx = new AudioContext();
+    const Ctor = getOfflineAudioContextCtor();
+    // یک نمونهٔ کوچک/بی‌اهمیت کافی است — فقط برای decodeAudioData لازم است،
+    // خروجی صوتی واقعی هیچ‌وقت رندر/پخش نمی‌شود.
+    const ctx = Ctor ? new Ctor(1, 1, 44100) : new AudioContext();
     try {
       // بدون slice — decodeAudioData بافر را منتقل می‌کند
       const decoded = await ctx.decodeAudioData(arrayBuffer);
@@ -46,7 +59,8 @@ export async function extractPeaks(blob: Blob, barCount = 120): Promise<PeaksRes
       const peakMax = Math.max(...rawPeaks, 0.0001);
       return { peaks: rawPeaks.map((p) => Math.min(1, p / peakMax)), duration };
     } finally {
-      void ctx.close();
+      // AudioContext (fallback path only) needs closing; OfflineAudioContext doesn't.
+      if (!Ctor && "close" in ctx) void (ctx as AudioContext).close();
     }
   } catch {
     return { peaks: fallbackPeaks(blob.size, barCount), duration: 0 };

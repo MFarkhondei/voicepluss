@@ -49,18 +49,25 @@ export async function prepareAudioForTranscription(
   }
 
   // decodeAudioData transfers/detaches the buffer on modern engines — no extra .slice()
-  const decodeCtx = new AudioContext();
+  // Use OfflineAudioContext for decoding: it never touches the live audio output device,
+  // so it can't interrupt/stop any other <audio> element that happens to be playing
+  // (a live AudioContext can seize the audio hardware and stop other playback on some
+  // browsers/OSes).
+  const OfflineCtor = (window as unknown as { OfflineAudioContext?: typeof OfflineAudioContext; webkitOfflineAudioContext?: typeof OfflineAudioContext }).OfflineAudioContext
+    || (window as unknown as { webkitOfflineAudioContext?: typeof OfflineAudioContext }).webkitOfflineAudioContext
+    || null;
+  const decodeCtx: OfflineAudioContext | AudioContext = OfflineCtor ? new OfflineCtor(1, 1, 44100) : new AudioContext();
   let decoded: AudioBuffer;
   try {
     onProgress?.("در حال رمزگشایی صوت…");
     decoded = await decodeCtx.decodeAudioData(arrayBuffer);
   } catch {
-    await decodeCtx.close().catch(() => {});
+    if (!OfflineCtor) await (decodeCtx as AudioContext).close().catch(() => {});
     throw new Error("رمزگشایی صوت ناموفق بود. فرمت فایل را بررسی کنید.");
   } finally {
     // @ts-expect-error intentional release
     arrayBuffer = null;
-    await decodeCtx.close().catch(() => {});
+    if (!OfflineCtor) await (decodeCtx as AudioContext).close().catch(() => {});
   }
 
   const srcRate = decoded.sampleRate;
