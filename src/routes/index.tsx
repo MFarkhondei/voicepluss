@@ -1109,7 +1109,7 @@ function Index() {
   );
 
   const textPanel = (
-    <div className="flex flex-col gap-2.5 p-3.5">
+    <div className="flex h-full min-h-0 flex-col gap-2.5 p-3.5">
       {!hasTranscript ? (
         <p className="py-8 text-center text-sm text-muted-foreground">هنوز متنی تولید نشده است. از تب «بارگذاری» شروع کنید.</p>
       ) : (
@@ -1162,7 +1162,10 @@ function Index() {
               {onlyLowConfidence && !segmentQuery.trim() ? "بخشی با اطمینان پایین یافت نشد." : "موردی یافت نشد."}
             </p>
           ) : (
-            <ul ref={listRef} className="flex max-h-[13rem] min-w-0 flex-col gap-1.5 overflow-y-auto overflow-x-hidden">
+            <ul
+              ref={listRef}
+              className={`flex min-h-0 min-w-0 flex-col gap-1.5 overflow-y-auto overflow-x-hidden ${isMobile ? "max-h-[13rem]" : "flex-1"}`}
+            >
               {filteredSegments.map(({ s, i }) => (
                 <SegmentRow
                   key={i}
