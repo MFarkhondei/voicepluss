@@ -983,7 +983,7 @@ function Index() {
       {library.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted-foreground">هنوز فایلی ذخیره نشده است.</p>
       ) : (
-        <ul className="flex flex-col gap-1.5 overflow-y-auto lg:h-[11.5rem] lg:max-h-[11.5rem]">
+        <ul className="flex max-h-[15.5rem] flex-col gap-1.5 overflow-y-auto">
           {library.map((item) => {
             const active = item.id === currentItemId;
             return (
@@ -1366,6 +1366,13 @@ function Index() {
     </div>
   );
 
+  const desktopPlaylistPanel = (
+    <>
+      {playlistPanel}
+      <div className="hidden lg:block">{dockedPlayer}</div>
+    </>
+  );
+
   const tabs: { id: "upload" | "playlist" | "text"; label: string; icon: typeof Upload }[] = [
     { id: "upload", label: "بارگذاری", icon: Upload },
     { id: "playlist", label: "پلی‌لیست", icon: ListMusic },
@@ -1373,7 +1380,7 @@ function Index() {
   ];
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full min-w-0 max-w-[1280px] flex-col gap-3 px-2.5 py-6 sm:px-6 sm:py-10 lg:px-8">
+    <main className="mx-auto flex min-h-dvh w-full min-w-0 max-w-md flex-col gap-3 px-2.5 py-6 sm:py-10 lg:max-w-[1600px] lg:px-6 lg:py-6">
       <a href="#vp-app" className="sr-only-focusable rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">پرش به برنامه</a>
       <p aria-live="polite" className="sr-only">{status}</p>
 
@@ -1416,27 +1423,34 @@ function Index() {
           </ul>
         )}
 
-        <div dir="ltr" className="min-h-[300px] lg:grid lg:grid-cols-3 lg:items-stretch lg:gap-0">
-          <section dir="rtl" aria-label="متن خروجی" className="hidden min-w-0 border-l border-border lg:order-1 lg:block">
-            {textPanel}
+        {/* Desktop: keep all three sections open side-by-side.
+            With RTL layout, the DOM order below places upload on the right,
+            playlist in the center, and output text on the left. */}
+        <div className="hidden min-h-[300px] lg:flex lg:flex-row lg:items-stretch">
+          <section className="min-w-0 flex-1 border-l border-border" aria-label="بارگذاری">
+            <div className="border-b border-border px-4 py-3 text-sm font-medium">بارگذاری</div>
+            <div className="lg:min-h-[640px]">{uploadPanel}</div>
           </section>
-          <section dir="rtl" aria-label="پلی‌لیست" className="hidden min-w-0 border-l border-border lg:order-2 lg:flex lg:flex-col">
-            <div className="min-h-0 flex-1">{playlistPanel}</div>
-            {dockedPlayer}
+
+          <section className="min-w-0 flex-1 border-l border-border" aria-label="پلی‌لیست">
+            <div className="border-b border-border px-4 py-3 text-sm font-medium">پلی‌لیست</div>
+            <div className="lg:min-h-[640px]">{desktopPlaylistPanel}</div>
           </section>
-          <section dir="rtl" aria-label="بارگذاری" className="hidden min-w-0 lg:order-3 lg:block">
-            {uploadPanel}
+
+          <section className="min-w-0 flex-1" aria-label="متن خروجی">
+            <div className="border-b border-border px-4 py-3 text-sm font-medium">متن خروجی</div>
+            <div className="lg:min-h-[640px]">{textPanel}</div>
           </section>
-          <div className="lg:hidden">
-            {activeTab === "upload" && uploadPanel}
-            {activeTab === "playlist" && playlistPanel}
-            {activeTab === "text" && textPanel}
-          </div>
         </div>
 
-        <div className="lg:hidden">
-          {dockedPlayer}
+        {/* Mobile/tablet: preserve the existing tab behavior. */}
+        <div className="min-h-[300px] lg:hidden">
+          {activeTab === "upload" && uploadPanel}
+          {activeTab === "playlist" && playlistPanel}
+          {activeTab === "text" && textPanel}
         </div>
+
+        <div className="lg:hidden">{dockedPlayer}</div>
 
         <div className="flex border-t border-border lg:hidden">
           {tabs.map((t) => {
