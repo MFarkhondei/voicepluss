@@ -1226,7 +1226,7 @@ function Index() {
 
 
   const dockedPlayer = audioUrl && (
-    <div className="border-t border-border bg-surface/60 px-3.5 pb-1.5 pt-2.5">
+    <div className="shrink-0 border-t border-border bg-surface/60 px-3.5 pb-1.5 pt-2.5">
       <audio
         ref={playerRef}
         src={audioUrl}
@@ -1492,12 +1492,12 @@ function Index() {
   ];
 
   return (
-    <main className={`mx-auto flex min-h-dvh w-full min-w-0 flex-col gap-3 px-2.5 py-6 sm:py-10 ${isMobile ? "max-w-md" : "max-w-6xl"}`}>
+    <main className={`mx-auto flex w-full min-w-0 flex-col gap-3 px-2.5 ${isMobile ? "h-dvh max-w-md py-0" : "min-h-dvh max-w-6xl py-6 sm:py-10"}`}>
       <a href="#vp-app" className="sr-only-focusable rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">پرش به برنامه</a>
       <p aria-live="polite" className="sr-only">{status}</p>
 
-      <div id="vp-app" className="panel flex min-w-0 flex-col overflow-hidden rounded-[20px]">
-        <div className="flex items-center justify-between gap-2 border-b border-border px-3.5 py-3">
+      <div id="vp-app" className={`panel flex min-w-0 flex-col overflow-hidden ${isMobile ? "min-h-0 flex-1 rounded-none" : "rounded-[20px]"}`}>
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3.5 py-3">
           <p className="text-[15px] font-medium">VoicePluss</p>
           <div className="flex shrink-0 items-center gap-1.5">
             <button
@@ -1525,7 +1525,7 @@ function Index() {
         </div>
 
         {showShortcuts && (
-          <ul className="space-y-1.5 border-b border-border px-3.5 py-3 text-right text-[12px] text-muted-foreground">
+          <ul className="shrink-0 space-y-1.5 border-b border-border px-3.5 py-3 text-right text-[12px] text-muted-foreground">
             <li><kbd className="rounded border border-border bg-surface px-1.5 font-mono">Space</kbd> — پخش / توقف</li>
             <li><kbd className="rounded border border-border bg-surface px-1.5 font-mono">→</kbd> — ۱۰ ثانیه جلو</li>
             <li><kbd className="rounded border border-border bg-surface px-1.5 font-mono">←</kbd> — ۱۰ ثانیه عقب</li>
@@ -1537,7 +1537,7 @@ function Index() {
 
         {isMobile ? (
           <>
-            <div className="min-h-[300px]">
+            <div className="min-h-0 flex-1 overflow-y-auto">
               {activeTab === "upload" && uploadPanel}
               {activeTab === "playlist" && playlistPanel}
               {activeTab === "text" && textPanel}
@@ -1545,7 +1545,7 @@ function Index() {
 
             {dockedPlayer}
 
-            <div className="flex border-t border-border">
+            <div className="flex shrink-0 border-t border-border">
               {tabs.map((t) => {
                 const Icon = t.icon;
                 const isActive = activeTab === t.id;
