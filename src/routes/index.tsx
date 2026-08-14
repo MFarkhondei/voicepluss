@@ -1043,12 +1043,12 @@ function Index() {
   );
 
   const playlistPanel = (
-    <div className="flex flex-col gap-2 p-3.5">
-      <p className="mb-0.5 text-xs text-muted-foreground">فایل‌های اخیر</p>
+    <div className="flex h-full min-h-0 flex-col gap-2 p-3.5">
+      <p className="mb-0.5 shrink-0 text-xs text-muted-foreground">فایل‌های اخیر</p>
       {library.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted-foreground">هنوز فایلی ذخیره نشده است.</p>
       ) : (
-        <ul className="flex max-h-[15.5rem] flex-col gap-1.5 overflow-y-auto">
+        <ul className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto">
           {library.map((item) => {
             const active = item.id === currentItemId;
             return (
@@ -1102,7 +1102,7 @@ function Index() {
           })}
         </ul>
       )}
-      <p className="mt-1 px-1 text-[11px] text-muted-foreground">فایل‌ها و متن‌ها فقط روی همین دستگاه ذخیره می‌شوند (۲۰ مورد آخر).</p>
+      <p className="mt-1 shrink-0 px-1 text-[11px] text-muted-foreground">فایل‌ها و متن‌ها فقط روی همین دستگاه ذخیره می‌شوند (۲۰ مورد آخر).</p>
     </div>
   );
 
@@ -1192,7 +1192,7 @@ function Index() {
           ) : (
             <ul
               ref={listRef}
-              className={`flex min-h-0 min-w-0 flex-col gap-1.5 overflow-y-auto overflow-x-hidden ${isMobile ? "max-h-[13rem]" : "flex-1"}`}
+              className="flex min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-y-auto overflow-x-hidden"
             >
               {filteredSegments.map(({ s, i }) => (
                 <SegmentRow
@@ -1492,11 +1492,11 @@ function Index() {
   ];
 
   return (
-    <main className={`mx-auto flex w-full min-w-0 flex-col gap-3 px-2.5 ${isMobile ? "h-dvh max-w-md py-0" : "min-h-dvh max-w-6xl py-6 sm:py-10"}`}>
+    <main className={`mx-auto flex w-full min-w-0 flex-col gap-3 px-2.5 ${isMobile ? "h-dvh max-w-md py-2.5" : "min-h-dvh max-w-6xl py-6 sm:py-10"}`}>
       <a href="#vp-app" className="sr-only-focusable rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">پرش به برنامه</a>
       <p aria-live="polite" className="sr-only">{status}</p>
 
-      <div id="vp-app" className={`panel flex min-w-0 flex-col overflow-hidden ${isMobile ? "min-h-0 flex-1 rounded-none" : "rounded-[20px]"}`}>
+      <div id="vp-app" className={`panel flex min-w-0 flex-col overflow-hidden rounded-[20px] ${isMobile ? "min-h-0 flex-1" : ""}`}>
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3.5 py-3">
           <p className="text-[15px] font-medium">VoicePluss</p>
           <div className="flex shrink-0 items-center gap-1.5">
