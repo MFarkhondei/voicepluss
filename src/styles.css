@@ -200,11 +200,6 @@
   /* Some browsers (notably Firefox) don't reliably apply `accent-color`
      when the value is an oklch() custom property, so the playback slider's
      thumb fell back to the plain OS-default gray circle instead of the
-     theme color. Style the thumb explicitly via pseudo-elements instead,
-     which every browser applies consistently. */
-  /* Some browsers (notably Firefox) don't reliably apply `accent-color`
-     when the value is an oklch() custom property, so the playback slider's
-     thumb fell back to the plain OS-default gray circle instead of the
      theme color. Only resetting the thumb's native appearance (without also
      resetting the track's) left the track half-native/half-custom, which is
      why it then rendered with the wrong color or not at all in some
@@ -219,7 +214,9 @@
   input[type="range"]::-webkit-slider-runnable-track {
     height: 6px;
     border-radius: 9999px;
-    background-color: var(--color-muted);
+    /* --color-muted alone was too close to the background to read as a
+       track at all; mix in the (darker) muted-foreground tone for contrast. */
+    background-color: color-mix(in oklch, var(--color-muted-foreground) 55%, var(--color-muted));
   }
   input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
@@ -236,7 +233,7 @@
   input[type="range"]::-moz-range-track {
     height: 6px;
     border-radius: 9999px;
-    background-color: var(--color-muted);
+    background-color: color-mix(in oklch, var(--color-muted-foreground) 55%, var(--color-muted));
   }
   input[type="range"]::-moz-range-progress {
     height: 6px;
