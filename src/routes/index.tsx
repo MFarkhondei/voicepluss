@@ -1127,6 +1127,8 @@ function Index() {
     </>
   );
 
+  const preparingPlayback = !!loadingItemId && loadingItemId === currentItemId;
+
   const textPanel = (
     <div className="flex h-full min-h-0 flex-col gap-2.5 p-3.5">
       {!hasTranscript ? (
@@ -1151,6 +1153,13 @@ function Index() {
               </button>
             ) : null}
           </div>
+
+          {preparingPlayback ? (
+            <div className="flex items-center justify-center gap-2 rounded-lg border border-border bg-secondary/40 py-2 text-[12px] text-muted-foreground">
+              <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+              در حال آماده‌سازی پخش…
+            </div>
+          ) : null}
 
           <div className="flex items-center gap-1.5">
             <button onClick={copy} disabled={segments.length === 0} aria-label="کپی متن" className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg bg-primary px-2 py-1.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
