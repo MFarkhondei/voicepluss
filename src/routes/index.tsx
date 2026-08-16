@@ -1061,7 +1061,7 @@ function Index() {
                     className="flex min-w-0 flex-1 items-center gap-2.5 text-start disabled:opacity-60"
                     title="بارگذاری این فایل و متن آن"
                   >
-                    <span className={`flex size-8.5 shrink-0 items-center justify-center rounded-full ${active ? "bg-accent text-accent-foreground" : "bg-surface text-muted-foreground"}`}>
+                    <span className={`flex size-8.5 shrink-0 items-center justify-center rounded-full ${active ? "bg-primary text-primary-foreground" : "bg-surface text-muted-foreground"}`}>
                       {loadingItemId === item.id ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Play className="size-4" aria-hidden="true" />}
                     </span>
                     <span className="min-w-0 flex-1">
@@ -1492,7 +1492,7 @@ function Index() {
   ];
 
   return (
-    <main className={`mx-auto flex w-full min-w-0 flex-col gap-3 px-2.5 ${isMobile ? "h-dvh max-w-md pt-2.5 pb-5" : "h-dvh max-h-dvh max-w-6xl py-6 sm:py-10"}`}>
+    <main className={`mx-auto flex w-full min-w-0 flex-col gap-3 px-2.5 ${isMobile ? "h-dvh max-w-md pt-2.5 pb-8" : "h-dvh max-h-dvh max-w-6xl py-6 sm:py-10"}`}>
       <a href="#vp-app" className="sr-only-focusable rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">پرش به برنامه</a>
       <p aria-live="polite" className="sr-only">{status}</p>
 
