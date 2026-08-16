@@ -1496,7 +1496,7 @@ function Index() {
       <a href="#vp-app" className="sr-only-focusable rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">پرش به برنامه</a>
       <p aria-live="polite" className="sr-only">{status}</p>
 
-      <div id="vp-app" className={`panel flex min-w-0 flex-col overflow-hidden rounded-[20px] ${isMobile ? "min-h-0 flex-1" : ""}`}>
+      <div id="vp-app" className={`panel flex min-w-0 flex-col overflow-hidden rounded-[20px] ${isMobile ? "min-h-0 flex-1" : "min-h-0 h-full"}`}>
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3.5 py-3">
           <p className="text-[15px] font-medium">VoicePluss</p>
           <div className="flex shrink-0 items-center gap-1.5">
