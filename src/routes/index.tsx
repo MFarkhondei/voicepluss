@@ -951,7 +951,7 @@ function Index() {
     health.state === "ok" ? "سرویس فعال" : health.state === "error" ? "سرویس در دسترس نیست" : "در حال بررسی سرویس";
 
   const uploadPanel = (
-    <div className="flex flex-col gap-3 p-3.5">
+    <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto p-3.5">
       <div className="overflow-hidden rounded-xl border border-border bg-card">
         <div className="flex items-center justify-between px-3.5 py-3">
           <span className="text-sm font-medium">{recording ? `در حال ضبط… ${formatTime(elapsed)}` : "شروع ضبط و بارگذاری فایل"}</span>
