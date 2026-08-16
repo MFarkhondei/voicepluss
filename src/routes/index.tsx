@@ -1061,7 +1061,7 @@ function Index() {
                     className="flex min-w-0 flex-1 items-center gap-2.5 text-start disabled:opacity-60"
                     title="بارگذاری این فایل و متن آن"
                   >
-                    <span className={`flex size-8.5 shrink-0 items-center justify-center rounded-full ${active ? "bg-accent text-accent-foreground" : "bg-surface text-muted-foreground"}`}>
+                    <span className={`flex size-8.5 shrink-0 items-center justify-center rounded-full ${active ? "bg-primary text-primary-foreground" : "bg-surface text-muted-foreground"}`}>
                       {loadingItemId === item.id ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Play className="size-4" aria-hidden="true" />}
                     </span>
                     <span className="min-w-0 flex-1">
