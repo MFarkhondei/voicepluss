@@ -294,7 +294,7 @@ function Index() {
   const [repeatMode, setRepeatMode] = useState<"off" | "inf" | "1" | "2" | "3" | "4" | "5">(() => {
     try {
       const v = localStorage.getItem("vp_repeatMode");
-      if (v === "off" || v === "inf" || ["1","2","3","4","5"].includes(v)) return v as any;
+      if (v && (v === "off" || v === "inf" || ["1","2","3","4","5"].includes(v))) return v as any;
     } catch {}
     return "off";
   });
@@ -951,7 +951,7 @@ function Index() {
     health.state === "ok" ? "سرویس فعال" : health.state === "error" ? "سرویس در دسترس نیست" : "در حال بررسی سرویس";
 
   const uploadPanel = (
-    <div className="flex flex-col gap-3 p-3.5">
+    <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto p-3.5">
       <div className="overflow-hidden rounded-xl border border-border bg-card">
         <div className="flex items-center justify-between px-3.5 py-3">
           <span className="text-sm font-medium">{recording ? `در حال ضبط… ${formatTime(elapsed)}` : "شروع ضبط و بارگذاری فایل"}</span>
@@ -1492,11 +1492,11 @@ function Index() {
   ];
 
   return (
-    <main className={`mx-auto flex w-full min-w-0 flex-col gap-3 px-2.5 ${isMobile ? "h-dvh max-w-md py-2.5" : "min-h-dvh max-w-6xl py-6 sm:py-10"}`}>
+    <main className={`mx-auto flex w-full min-w-0 flex-col gap-3 px-2.5 ${isMobile ? "h-dvh max-w-md py-2.5" : "h-dvh max-h-dvh max-w-6xl py-6 sm:py-10"}`}>
       <a href="#vp-app" className="sr-only-focusable rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">پرش به برنامه</a>
       <p aria-live="polite" className="sr-only">{status}</p>
 
-      <div id="vp-app" className={`panel flex min-w-0 flex-col overflow-hidden rounded-[20px] ${isMobile ? "min-h-0 flex-1" : ""}`}>
+      <div id="vp-app" className={`panel flex min-w-0 flex-col overflow-hidden rounded-[20px] ${isMobile ? "min-h-0 flex-1" : "min-h-0 h-full"}`}>
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3.5 py-3">
           <p className="text-[15px] font-medium">VoicePluss</p>
           <div className="flex shrink-0 items-center gap-1.5">
@@ -1565,13 +1565,13 @@ function Index() {
             </div>
           </>
         ) : (
-          <div className="grid grid-cols-3 items-stretch">
-            <div className="h-[420px] min-w-0 overflow-y-auto">{uploadPanel}</div>
-            <div className="flex h-[420px] min-w-0 flex-col border-s border-border">
-              <div className="flex-1 overflow-y-auto">{playlistPanel}</div>
+          <div className="grid grid-cols-3 items-stretch min-h-0 flex-1 h-full">
+            <div className="h-full min-w-0 overflow-hidden">{uploadPanel}</div>
+            <div className="flex h-full min-w-0 flex-col overflow-hidden border-s border-border">
+              <div className="flex-1 overflow-hidden">{playlistPanel}</div>
               {dockedPlayer}
             </div>
-            <div className="h-[420px] min-w-0 overflow-y-auto border-s border-border">{textPanel}</div>
+            <div className="h-full min-w-0 overflow-hidden border-s border-border">{textPanel}</div>
           </div>
         )}
       </div>
