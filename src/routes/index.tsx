@@ -1492,7 +1492,7 @@ function Index() {
   ];
 
   return (
-    <main className={`mx-auto flex w-full min-w-0 flex-col gap-3 px-2.5 ${isMobile ? "h-dvh max-w-md pt-2.5 pb-5" : "h-dvh max-h-dvh max-w-6xl py-6 sm:py-10"}`}>
+    <main className={`mx-auto flex w-full min-w-0 flex-col gap-3 px-2.5 ${isMobile ? "h-dvh max-w-md pt-2.5 pb-8" : "h-dvh max-h-dvh max-w-6xl py-6 sm:py-10"}`}>
       <a href="#vp-app" className="sr-only-focusable rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">پرش به برنامه</a>
       <p aria-live="polite" className="sr-only">{status}</p>
 
