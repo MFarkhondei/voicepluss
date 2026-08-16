@@ -1565,13 +1565,13 @@ function Index() {
             </div>
           </>
         ) : (
-          <div className="grid grid-cols-3 items-stretch">
-            <div className="h-[420px] min-w-0 overflow-y-auto">{uploadPanel}</div>
-            <div className="flex h-[420px] min-w-0 flex-col border-s border-border">
-              <div className="flex-1 overflow-y-auto">{playlistPanel}</div>
+          <div className="grid grid-cols-3 items-stretch min-h-0 flex-1 h-full">
+            <div className="h-full min-w-0 overflow-hidden">{uploadPanel}</div>
+            <div className="flex h-full min-w-0 flex-col overflow-hidden border-s border-border">
+              <div className="flex-1 overflow-hidden">{playlistPanel}</div>
               {dockedPlayer}
             </div>
-            <div className="h-[420px] min-w-0 overflow-y-auto border-s border-border">{textPanel}</div>
+            <div className="h-full min-w-0 overflow-hidden border-s border-border">{textPanel}</div>
           </div>
         )}
       </div>
