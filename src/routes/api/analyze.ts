@@ -6,7 +6,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 const MAX_CHARS = 48_000;
 const TIMEOUT_MS = 120_000;
-const MODEL = "llama-3.3-70b-versatile";
+const MODEL = "openai/gpt-oss-120b";
 
 const QUICK_PROMPT = `تو دستیار تحلیل متن فارسی هستی. فقط بر اساس متن داده‌شده پاسخ بده.
 خروجی را دقیقاً با این ساختار و به فارسی بنویس:
