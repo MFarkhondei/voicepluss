@@ -34,6 +34,16 @@ import { prepareAudioForTranscription, DEFAULT_PART_MINUTES } from "@/lib/splitA
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   listLibrary,
   getLibraryItem,
   putLibraryItem,
@@ -307,6 +317,8 @@ function Index() {
   const [currentItemId, setCurrentItemId] = useState<string | null>(null);
   const [loadingItemId, setLoadingItemId] = useState<string | null>(null);
   const [downloadingItemId, setDownloadingItemId] = useState<string | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<LibraryMeta | null>(null);
+  const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -332,6 +344,7 @@ function Index() {
   const seekCleanupRef = useRef<(() => void) | null>(null);
   const lastSavedTimeRef = useRef(0);
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
 
   // Loading spinner on a playlist row should stay on until playback actually
   // starts (or clearly fails), not just until the source is attached.
@@ -370,6 +383,52 @@ function Index() {
   }, []);
 
   useEffect(() => () => { if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current); }, []);
+
+  // Keep mobile screens awake while audio is actively playing. Browsers release
+  // the lock when the page is hidden, so request it again when the user returns.
+  useEffect(() => {
+    let cancelled = false;
+
+    const releaseWakeLock = async () => {
+      const lock = wakeLockRef.current;
+      wakeLockRef.current = null;
+      if (lock) await lock.release().catch(() => {});
+    };
+
+    const requestWakeLock = async () => {
+      if (!playing || document.visibilityState !== "visible" || !("wakeLock" in navigator) || wakeLockRef.current) return;
+      try {
+        const lock = await navigator.wakeLock.request("screen");
+        if (cancelled || !playerRef.current || playerRef.current.paused) {
+          await lock.release().catch(() => {});
+          return;
+        }
+        wakeLockRef.current = lock;
+        lock.addEventListener("release", () => {
+          if (wakeLockRef.current === lock) wakeLockRef.current = null;
+        });
+      } catch {
+        // Wake Lock is best-effort and may be denied by the browser or OS.
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") void requestWakeLock();
+    };
+
+    if (playing) {
+      void requestWakeLock();
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+    } else {
+      void releaseWakeLock();
+    }
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      void releaseWakeLock();
+    };
+  }, [playing]);
 
   const cancelJob = useCallback(() => { abortRef.current?.abort(); abortRef.current = null; }, []);
   const clearAnalysis = useCallback(() => { setAnalysis(null); setAnalysisMode(null); setAnalysisError(null); }, []);
@@ -448,9 +507,15 @@ function Index() {
   }, [cancelJob, clearAnalysis, clearLoadingFor, refreshLibrary, setSourceFromBlob]);
 
   const removeLibraryItem = useCallback(async (id: string) => {
-    await deleteLibraryItem(id);
-    if (currentItemIdRef.current === id) { currentItemIdRef.current = null; setCurrentItemId(null); }
-    await refreshLibrary();
+    setDeletingItemId(id);
+    try {
+      await deleteLibraryItem(id);
+      if (currentItemIdRef.current === id) { currentItemIdRef.current = null; setCurrentItemId(null); }
+      await refreshLibrary();
+      setDeleteCandidate(null);
+    } finally {
+      setDeletingItemId(null);
+    }
   }, [refreshLibrary]);
 
   const downloadLibraryAudio = useCallback(async (id: string, name: string) => {
@@ -1089,7 +1154,7 @@ function Index() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => void removeLibraryItem(item.id)}
+                    onClick={() => setDeleteCandidate(item)}
                     className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                     aria-label={`حذف ${item.name} از پلی‌لیست`}
                     title="حذف از حافظه"
@@ -1103,6 +1168,30 @@ function Index() {
         </ul>
       )}
       <p className="mt-1 shrink-0 px-1 text-[11px] text-muted-foreground">فایل‌ها و متن‌ها فقط روی همین دستگاه ذخیره می‌شوند (۲۰ مورد آخر).</p>
+      <AlertDialog open={deleteCandidate !== null} onOpenChange={(open) => { if (!open && !deletingItemId) setDeleteCandidate(null); }}>
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>حذف از پلی‌لیست؟</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteCandidate ? `فایل «${deleteCandidate.name}» و متن ذخیره‌شدهٔ آن از این دستگاه حذف می‌شود. این عملیات قابل بازگشت نیست.` : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingItemId !== null}>انصراف</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!deleteCandidate || deletingItemId !== null}
+              onClick={(event) => {
+                event.preventDefault();
+                if (deleteCandidate) void removeLibraryItem(deleteCandidate.id);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletingItemId ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+              حذف
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 
