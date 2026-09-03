@@ -346,6 +346,7 @@ function Index() {
   const lastSavedTimeRef = useRef(0);
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  const linkInputRef = useRef<HTMLInputElement | null>(null);
 
   // Loading spinner on a playlist row should stay on until playback actually
   // starts (or clearly fails), not just until the source is attached.
