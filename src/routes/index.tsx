@@ -1085,7 +1085,22 @@ function Index() {
           </label>
           <button
             type="button"
-            onClick={() => setLinkOpen((v) => !v)}
+            onClick={async () => {
+              const willOpen = !linkOpen;
+              setLinkOpen(willOpen);
+              if (willOpen) {
+                try {
+                  const text = await navigator.clipboard.readText();
+                  if (text && text.trim().startsWith("http")) {
+                    setLinkUrl(text.trim());
+                  }
+                } catch {
+                  // clipboard permission denied or empty — ignore
+                }
+                // focus the input after it mounts
+                setTimeout(() => linkInputRef.current?.focus(), 0);
+              }
+            }}
             disabled={loading}
             aria-expanded={linkOpen}
             className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-4.5 py-2.5 text-[13px] font-medium transition-colors hover:bg-secondary disabled:opacity-50"
