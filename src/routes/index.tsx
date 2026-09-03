@@ -346,6 +346,7 @@ function Index() {
   const lastSavedTimeRef = useRef(0);
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  const linkInputRef = useRef<HTMLInputElement | null>(null);
 
   // Loading spinner on a playlist row should stay on until playback actually
   // starts (or clearly fails), not just until the source is attached.
@@ -1084,7 +1085,22 @@ function Index() {
           </label>
           <button
             type="button"
-            onClick={() => setLinkOpen((v) => !v)}
+            onClick={async () => {
+              const willOpen = !linkOpen;
+              setLinkOpen(willOpen);
+              if (willOpen) {
+                try {
+                  const text = await navigator.clipboard.readText();
+                  if (text && text.trim().startsWith("http")) {
+                    setLinkUrl(text.trim());
+                  }
+                } catch {
+                  // clipboard permission denied or empty — ignore
+                }
+                // focus the input after it mounts
+                setTimeout(() => linkInputRef.current?.focus(), 0);
+              }
+            }}
             disabled={loading}
             aria-expanded={linkOpen}
             className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-4.5 py-2.5 text-[13px] font-medium transition-colors hover:bg-secondary disabled:opacity-50"
@@ -1095,6 +1111,7 @@ function Index() {
           {linkOpen && (
             <div className="flex w-full flex-col gap-2">
               <input
+                ref={linkInputRef}
                 type="url"
                 dir="ltr"
                 value={linkUrl}
