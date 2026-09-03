@@ -27,6 +27,7 @@ import {
   Clock,
   FileText,
   FileAudio,
+  Link as LinkIcon,
 } from "lucide-react";
 import { encodeWav } from "@/lib/wav";
 import { toSrt, toTxt, downloadText, parseSrt } from "@/lib/subtitles";
@@ -1015,7 +1016,42 @@ function Index() {
   const healthLabel =
     health.state === "ok" ? "سرویس فعال" : health.state === "error" ? "سرویس در دسترس نیست" : "در حال بررسی سرویس";
 
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkLoading, setLinkLoading] = useState(false);
+
+  const loadFromLink = async () => {
+    const url = linkUrl.trim();
+    if (!url) return;
+    setLinkLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/fetch-media", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(j?.error || "دریافت فایل از لینک ممکن نشد.");
+      }
+      const blob = await res.blob();
+      if (blob.size === 0) throw new Error("فایل دریافتی خالی است.");
+      const rawName = res.headers.get("x-file-name");
+      const name = rawName ? decodeURIComponent(rawName) : "media";
+      onFile(new File([blob], name, { type: blob.type || "application/octet-stream" }));
+      setLinkOpen(false);
+      setLinkUrl("");
+      setStatus("فایل از لینک دریافت شد.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "دریافت فایل از لینک ممکن نشد.");
+    } finally {
+      setLinkLoading(false);
+    }
+  };
+
   const uploadPanel = (
+
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto p-3.5">
       <div className="overflow-hidden rounded-xl border border-border bg-card">
         <div className="flex items-center justify-between px-3.5 py-3">
@@ -1034,7 +1070,7 @@ function Index() {
           </button>
           <p className="text-[13px] text-muted-foreground">{recording ? "برای پایان ضبط دوباره کلیک کنید" : "برای شروع ضبط کلیک کنید"}</p>
         </div>
-        <div className="flex justify-center border-t border-border px-3.5 py-3.5">
+        <div className="flex flex-col items-center gap-2.5 border-t border-border px-3.5 py-3.5">
           <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-surface px-4.5 py-2.5 text-[13px] font-medium transition-colors hover:bg-secondary">
             آپلود صوت یا ویدیو
             <Upload className="size-4" aria-hidden="true" />
@@ -1046,7 +1082,42 @@ function Index() {
               onChange={(e) => onFile(e.target.files?.[0])}
             />
           </label>
+          <button
+            type="button"
+            onClick={() => setLinkOpen((v) => !v)}
+            disabled={loading}
+            aria-expanded={linkOpen}
+            className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-4.5 py-2.5 text-[13px] font-medium transition-colors hover:bg-secondary disabled:opacity-50"
+          >
+            دریافت از لینک
+            <LinkIcon className="size-4" aria-hidden="true" />
+          </button>
+          {linkOpen && (
+            <div className="flex w-full flex-col gap-2">
+              <input
+                type="url"
+                dir="ltr"
+                value={linkUrl}
+                onChange={(e) => setLinkUrl(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") void loadFromLink(); }}
+                placeholder="https://example.com/audio.mp3"
+                aria-label="لینک مستقیم فایل صوتی یا ویدیویی"
+                className="w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-xs outline-none focus:ring-2 focus:ring-ring"
+              />
+              <button
+                type="button"
+                onClick={() => void loadFromLink()}
+                disabled={linkLoading || !linkUrl.trim() || loading}
+                className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                {linkLoading ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <LinkIcon className="size-4" aria-hidden="true" />}
+                {linkLoading ? "در حال دریافت…" : "دریافت فایل"}
+              </button>
+              <p className="text-[11px] text-muted-foreground">لینک باید مستقیم به فایل صوتی/ویدیویی اشاره کند (یوتیوب و اینستاگرام پشتیبانی نمی‌شود).</p>
+            </div>
+          )}
         </div>
+
       </div>
 
       {pendingFile && !loading && (
