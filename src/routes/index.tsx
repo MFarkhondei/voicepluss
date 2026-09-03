@@ -1111,6 +1111,7 @@ function Index() {
           {linkOpen && (
             <div className="flex w-full flex-col gap-2">
               <input
+                ref={linkInputRef}
                 type="url"
                 dir="ltr"
                 value={linkUrl}
