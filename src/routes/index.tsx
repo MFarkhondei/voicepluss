@@ -1065,7 +1065,7 @@ function Index() {
           </button>
           <p className="text-[13px] text-muted-foreground">{recording ? "برای پایان ضبط دوباره کلیک کنید" : "برای شروع ضبط کلیک کنید"}</p>
         </div>
-        <div className="flex justify-center border-t border-border px-3.5 py-3.5">
+        <div className="flex flex-col items-center gap-2.5 border-t border-border px-3.5 py-3.5">
           <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-surface px-4.5 py-2.5 text-[13px] font-medium transition-colors hover:bg-secondary">
             آپلود صوت یا ویدیو
             <Upload className="size-4" aria-hidden="true" />
@@ -1077,7 +1077,42 @@ function Index() {
               onChange={(e) => onFile(e.target.files?.[0])}
             />
           </label>
+          <button
+            type="button"
+            onClick={() => setLinkOpen((v) => !v)}
+            disabled={loading}
+            aria-expanded={linkOpen}
+            className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-4.5 py-2.5 text-[13px] font-medium transition-colors hover:bg-secondary disabled:opacity-50"
+          >
+            دریافت از لینک
+            <LinkIcon className="size-4" aria-hidden="true" />
+          </button>
+          {linkOpen && (
+            <div className="flex w-full flex-col gap-2">
+              <input
+                type="url"
+                dir="ltr"
+                value={linkUrl}
+                onChange={(e) => setLinkUrl(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") void loadFromLink(); }}
+                placeholder="https://example.com/audio.mp3"
+                aria-label="لینک مستقیم فایل صوتی یا ویدیویی"
+                className="w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-xs outline-none focus:ring-2 focus:ring-ring"
+              />
+              <button
+                type="button"
+                onClick={() => void loadFromLink()}
+                disabled={linkLoading || !linkUrl.trim() || loading}
+                className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                {linkLoading ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <LinkIcon className="size-4" aria-hidden="true" />}
+                {linkLoading ? "در حال دریافت…" : "دریافت فایل"}
+              </button>
+              <p className="text-[11px] text-muted-foreground">لینک باید مستقیم به فایل صوتی/ویدیویی اشاره کند (یوتیوب و اینستاگرام پشتیبانی نمی‌شود).</p>
+            </div>
+          )}
         </div>
+
       </div>
 
       {pendingFile && !loading && (
