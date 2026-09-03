@@ -1015,7 +1015,38 @@ function Index() {
   const healthLabel =
     health.state === "ok" ? "سرویس فعال" : health.state === "error" ? "سرویس در دسترس نیست" : "در حال بررسی سرویس";
 
+  const loadFromLink = async () => {
+    const url = linkUrl.trim();
+    if (!url) return;
+    setLinkLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/fetch-media", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(j?.error || "دریافت فایل از لینک ممکن نشد.");
+      }
+      const blob = await res.blob();
+      if (blob.size === 0) throw new Error("فایل دریافتی خالی است.");
+      const rawName = res.headers.get("x-file-name");
+      const name = rawName ? decodeURIComponent(rawName) : "media";
+      onFile(new File([blob], name, { type: blob.type || "application/octet-stream" }));
+      setLinkOpen(false);
+      setLinkUrl("");
+      setStatus("فایل از لینک دریافت شد.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "دریافت فایل از لینک ممکن نشد.");
+    } finally {
+      setLinkLoading(false);
+    }
+  };
+
   const uploadPanel = (
+
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto p-3.5">
       <div className="overflow-hidden rounded-xl border border-border bg-card">
         <div className="flex items-center justify-between px-3.5 py-3">

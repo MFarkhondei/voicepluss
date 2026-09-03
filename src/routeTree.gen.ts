@@ -15,6 +15,7 @@ import { Route as ApiTranslateRouteImport } from './routes/api/translate'
 import { Route as ApiTranscribeRouteImport } from './routes/api/transcribe'
 import { Route as ApiRefineRouteImport } from './routes/api/refine'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
+import { Route as ApiFetchMediaRouteImport } from './routes/api/fetch-media'
 import { Route as ApiAnalyzeRouteImport } from './routes/api/analyze'
 
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
@@ -47,6 +48,11 @@ const ApiHealthRoute = ApiHealthRouteImport.update({
   path: '/api/health',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiFetchMediaRoute = ApiFetchMediaRouteImport.update({
+  id: '/api/fetch-media',
+  path: '/api/fetch-media',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAnalyzeRoute = ApiAnalyzeRouteImport.update({
   id: '/api/analyze',
   path: '/api/analyze',
@@ -57,6 +63,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/api/analyze': typeof ApiAnalyzeRoute
+  '/api/fetch-media': typeof ApiFetchMediaRoute
   '/api/health': typeof ApiHealthRoute
   '/api/refine': typeof ApiRefineRoute
   '/api/transcribe': typeof ApiTranscribeRoute
@@ -66,6 +73,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/api/analyze': typeof ApiAnalyzeRoute
+  '/api/fetch-media': typeof ApiFetchMediaRoute
   '/api/health': typeof ApiHealthRoute
   '/api/refine': typeof ApiRefineRoute
   '/api/transcribe': typeof ApiTranscribeRoute
@@ -76,6 +84,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/api/analyze': typeof ApiAnalyzeRoute
+  '/api/fetch-media': typeof ApiFetchMediaRoute
   '/api/health': typeof ApiHealthRoute
   '/api/refine': typeof ApiRefineRoute
   '/api/transcribe': typeof ApiTranscribeRoute
@@ -87,6 +96,7 @@ export interface FileRouteTypes {
     | '/'
     | '/sitemap.xml'
     | '/api/analyze'
+    | '/api/fetch-media'
     | '/api/health'
     | '/api/refine'
     | '/api/transcribe'
@@ -96,6 +106,7 @@ export interface FileRouteTypes {
     | '/'
     | '/sitemap.xml'
     | '/api/analyze'
+    | '/api/fetch-media'
     | '/api/health'
     | '/api/refine'
     | '/api/transcribe'
@@ -105,6 +116,7 @@ export interface FileRouteTypes {
     | '/'
     | '/sitemap.xml'
     | '/api/analyze'
+    | '/api/fetch-media'
     | '/api/health'
     | '/api/refine'
     | '/api/transcribe'
@@ -115,6 +127,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   ApiAnalyzeRoute: typeof ApiAnalyzeRoute
+  ApiFetchMediaRoute: typeof ApiFetchMediaRoute
   ApiHealthRoute: typeof ApiHealthRoute
   ApiRefineRoute: typeof ApiRefineRoute
   ApiTranscribeRoute: typeof ApiTranscribeRoute
@@ -165,6 +178,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiHealthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/fetch-media': {
+      id: '/api/fetch-media'
+      path: '/api/fetch-media'
+      fullPath: '/api/fetch-media'
+      preLoaderRoute: typeof ApiFetchMediaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/analyze': {
       id: '/api/analyze'
       path: '/api/analyze'
@@ -179,6 +199,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   ApiAnalyzeRoute: ApiAnalyzeRoute,
+  ApiFetchMediaRoute: ApiFetchMediaRoute,
   ApiHealthRoute: ApiHealthRoute,
   ApiRefineRoute: ApiRefineRoute,
   ApiTranscribeRoute: ApiTranscribeRoute,
