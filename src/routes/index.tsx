@@ -27,6 +27,7 @@ import {
   Clock,
   FileText,
   FileAudio,
+  Link as LinkIcon,
 } from "lucide-react";
 import { encodeWav } from "@/lib/wav";
 import { toSrt, toTxt, downloadText, parseSrt } from "@/lib/subtitles";
@@ -1014,6 +1015,10 @@ function Index() {
     health.state === "ok" ? "bg-primary" : health.state === "error" ? "bg-destructive" : "animate-pulse bg-muted-foreground";
   const healthLabel =
     health.state === "ok" ? "سرویس فعال" : health.state === "error" ? "سرویس در دسترس نیست" : "در حال بررسی سرویس";
+
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkLoading, setLinkLoading] = useState(false);
 
   const loadFromLink = async () => {
     const url = linkUrl.trim();
