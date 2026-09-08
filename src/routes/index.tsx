@@ -386,8 +386,9 @@ function Index() {
 
   useEffect(() => () => { if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current); }, []);
 
-  // Keep mobile screens awake while audio is actively playing. Browsers release
-  // the lock when the page is hidden, so request it again when the user returns.
+  // Keep the screen awake while audio is playing OR while a transcription/
+  // conversion is in progress. Browsers release the lock when the page is hidden,
+  // so request it again when the user returns.
   useEffect(() => {
     let cancelled = false;
 
@@ -398,10 +399,14 @@ function Index() {
     };
 
     const requestWakeLock = async () => {
-      if (!playing || document.visibilityState !== "visible" || !("wakeLock" in navigator) || wakeLockRef.current) return;
+      if (document.visibilityState !== "visible" || !("wakeLock" in navigator) || wakeLockRef.current) return;
+      const needsLock = playing || loading;
+      if (!needsLock) return;
+      // When locking because of playback, only hold it while the player is actually playing.
+      if (playing && playerRef.current?.paused) return;
       try {
         const lock = await navigator.wakeLock.request("screen");
-        if (cancelled || !playerRef.current || playerRef.current.paused) {
+        if (cancelled) {
           await lock.release().catch(() => {});
           return;
         }
@@ -418,7 +423,7 @@ function Index() {
       if (document.visibilityState === "visible") void requestWakeLock();
     };
 
-    if (playing) {
+    if (playing || loading) {
       void requestWakeLock();
       document.addEventListener("visibilitychange", handleVisibilityChange);
     } else {
@@ -430,7 +435,7 @@ function Index() {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       void releaseWakeLock();
     };
-  }, [playing]);
+  }, [playing, loading]);
 
   const cancelJob = useCallback(() => { abortRef.current?.abort(); abortRef.current = null; }, []);
   const clearAnalysis = useCallback(() => { setAnalysis(null); setAnalysisMode(null); setAnalysisError(null); }, []);
