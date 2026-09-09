@@ -1249,7 +1249,23 @@ function Index() {
                       {loadingItemId === item.id ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Play className="size-4" aria-hidden="true" />}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] font-medium">{item.name}</span>
+                      {editingNameId === item.id ? (
+                        <input
+                          type="text"
+                          value={editingNameDraft}
+                          onChange={(e) => setEditingNameDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") { e.preventDefault(); void saveRename(); }
+                            if (e.key === "Escape") { e.preventDefault(); cancelRename(); }
+                          }}
+                          onBlur={() => void saveRename()}
+                          autoFocus
+                          className="w-full min-w-0 rounded-md border border-border bg-card px-1.5 py-0.5 text-[13px] font-medium outline-none focus:ring-2 focus:ring-ring"
+                          aria-label="ویرایش نام فایل"
+                        />
+                      ) : (
+                        <span className="block truncate text-[13px] font-medium">{item.name}</span>
+                      )}
                       <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
                         <span>{formatLibraryDate(item.updatedAt)}</span>
                         {item.segments.length > 0 && <span>{item.segments.length} بخش متن</span>}
@@ -1261,6 +1277,17 @@ function Index() {
                       </span>
                     </span>
                   </button>
+                  {editingNameId !== item.id && (
+                    <button
+                      type="button"
+                      onClick={() => startRename(item)}
+                      className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent/10 hover:text-accent"
+                      aria-label={`تغییر نام ${item.name}`}
+                      title="تغییر نام"
+                    >
+                      <Pencil className="size-4" aria-hidden="true" />
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => void downloadLibraryAudio(item.id, item.name)}
