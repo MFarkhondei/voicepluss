@@ -105,6 +105,10 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+function stripExtension(name: string) {
+  return name.replace(/\.(mp3|wav|webm|mp4|m4a|ogg|flac|aac|wma|mov|mkv|avi|ogv|3gp|m4v|oga|weba)$/i, "");
+}
+
 function isLowConfidence(c?: number | null) {
   return typeof c === "number" && Number.isFinite(c) && c < LOW_CONFIDENCE;
 }
