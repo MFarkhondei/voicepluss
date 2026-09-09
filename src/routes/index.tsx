@@ -1237,76 +1237,82 @@ function Index() {
             const active = item.id === currentItemId;
             return (
               <li key={item.id}>
-                <div className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2.5 transition-colors ${active ? "border border-accent/40 bg-accent/10" : "border border-transparent hover:bg-secondary/60"}`}>
+                <div className={`flex flex-col gap-2 rounded-xl px-2.5 py-2.5 transition-colors ${active ? "border border-accent/40 bg-accent/10" : "border border-transparent hover:bg-secondary/60"}`}>
                   <button
                     type="button"
                     onClick={() => void openLibraryItem(item.id)}
                     disabled={loading || loadingItemId === item.id}
-                    className="flex min-w-0 flex-1 items-center gap-2.5 text-start disabled:opacity-60"
+                    className="min-w-0 text-start disabled:opacity-60"
                     title="بارگذاری این فایل و متن آن"
                   >
-                    <span className={`flex size-8.5 shrink-0 items-center justify-center rounded-full ${active ? "bg-primary text-primary-foreground" : "bg-surface text-muted-foreground"}`}>
-                      {loadingItemId === item.id ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Play className="size-4" aria-hidden="true" />}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      {editingNameId === item.id ? (
-                        <input
-                          type="text"
-                          value={editingNameDraft}
-                          onChange={(e) => setEditingNameDraft(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") { e.preventDefault(); void saveRename(); }
-                            if (e.key === "Escape") { e.preventDefault(); cancelRename(); }
-                          }}
-                          onBlur={() => void saveRename()}
-                          autoFocus
-                          className="w-full min-w-0 rounded-md border border-border bg-card px-1.5 py-0.5 text-[13px] font-medium outline-none focus:ring-2 focus:ring-ring"
-                          aria-label="ویرایش نام فایل"
-                        />
-                      ) : (
-                        <span className="block truncate text-[13px] font-medium">{item.name}</span>
+                    {editingNameId === item.id ? (
+                      <input
+                        type="text"
+                        value={editingNameDraft}
+                        onChange={(e) => setEditingNameDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") { e.preventDefault(); void saveRename(); }
+                          if (e.key === "Escape") { e.preventDefault(); cancelRename(); }
+                        }}
+                        onBlur={() => void saveRename()}
+                        autoFocus
+                        className="w-full min-w-0 rounded-md border border-border bg-card px-1.5 py-0.5 text-[13px] font-medium outline-none focus:ring-2 focus:ring-ring"
+                        aria-label="ویرایش نام فایل"
+                      />
+                    ) : (
+                      <span className="block truncate text-[13px] font-medium">{item.name}</span>
+                    )}
+                    <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+                      <span>{formatLibraryDate(item.updatedAt)}</span>
+                      {item.lastTime > 1 && (
+                        <span className="inline-flex items-center gap-1">
+                          <Clock className="size-3" aria-hidden="true" /> ادامه از {formatTime(item.lastTime)}
+                        </span>
                       )}
-                      <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
-                        <span>{formatLibraryDate(item.updatedAt)}</span>
-                        {item.segments.length > 0 && <span>{item.segments.length} بخش متن</span>}
-                        {item.lastTime > 1 && (
-                          <span className="inline-flex items-center gap-1">
-                            <Clock className="size-3" aria-hidden="true" /> ادامه از {formatTime(item.lastTime)}
-                          </span>
-                        )}
-                      </span>
                     </span>
                   </button>
-                  {editingNameId !== item.id && (
+                  <div className="flex items-center justify-end gap-1">
                     <button
                       type="button"
-                      onClick={() => startRename(item)}
-                      className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent/10 hover:text-accent"
-                      aria-label={`تغییر نام ${item.name}`}
-                      title="تغییر نام"
+                      onClick={() => void openLibraryItem(item.id)}
+                      disabled={loading || loadingItemId === item.id}
+                      className={`inline-flex size-8.5 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-60 ${active ? "bg-primary text-primary-foreground" : "bg-surface text-muted-foreground hover:bg-primary hover:text-primary-foreground"}`}
+                      aria-label={`بارگذاری ${item.name}`}
+                      title="بارگذاری"
                     >
-                      <Pencil className="size-4" aria-hidden="true" />
+                      {loadingItemId === item.id ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Play className="size-4" aria-hidden="true" />}
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => void downloadLibraryAudio(item.id, item.name)}
-                    disabled={downloadingItemId === item.id}
-                    className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent/10 hover:text-accent disabled:opacity-60"
-                    aria-label={`دانلود فایل صوتی ${item.name}`}
-                    title="دانلود فایل صوتی"
-                  >
-                    {downloadingItemId === item.id ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Download className="size-4" aria-hidden="true" />}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDeleteCandidate(item)}
-                    className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                    aria-label={`حذف ${item.name} از پلی‌لیست`}
-                    title="حذف از حافظه"
-                  >
-                    <X className="size-4" aria-hidden="true" />
-                  </button>
+                    {editingNameId !== item.id && (
+                      <button
+                        type="button"
+                        onClick={() => startRename(item)}
+                        className="inline-flex size-8.5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent/10 hover:text-accent"
+                        aria-label={`تغییر نام ${item.name}`}
+                        title="تغییر نام"
+                      >
+                        <Pencil className="size-4" aria-hidden="true" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => void downloadLibraryAudio(item.id, item.name)}
+                      disabled={downloadingItemId === item.id}
+                      className="inline-flex size-8.5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent/10 hover:text-accent disabled:opacity-60"
+                      aria-label={`دانلود فایل صوتی ${item.name}`}
+                      title="دانلود فایل صوتی"
+                    >
+                      {downloadingItemId === item.id ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Download className="size-4" aria-hidden="true" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteCandidate(item)}
+                      className="inline-flex size-8.5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                      aria-label={`حذف ${item.name} از پلی‌لیست`}
+                      title="حذف از حافظه"
+                    >
+                      <X className="size-4" aria-hidden="true" />
+                    </button>
+                  </div>
                 </div>
               </li>
             );
