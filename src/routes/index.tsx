@@ -29,7 +29,6 @@ import {
   FileAudio,
   Link as LinkIcon,
   Pencil,
-  Check,
 } from "lucide-react";
 import { encodeWav } from "@/lib/wav";
 import { toSrt, toTxt, downloadText, parseSrt } from "@/lib/subtitles";
