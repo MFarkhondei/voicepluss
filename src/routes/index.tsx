@@ -321,6 +321,8 @@ function Index() {
   const [downloadingItemId, setDownloadingItemId] = useState<string | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<LibraryMeta | null>(null);
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
+  const [editingNameId, setEditingNameId] = useState<string | null>(null);
+  const [editingNameDraft, setEditingNameDraft] = useState("");
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
