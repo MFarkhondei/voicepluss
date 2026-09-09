@@ -528,6 +528,29 @@ function Index() {
     }
   }, [refreshLibrary]);
 
+  const startRename = useCallback((item: LibraryMeta) => {
+    setEditingNameId(item.id);
+    setEditingNameDraft(item.name);
+  }, []);
+
+  const saveRename = useCallback(async () => {
+    const id = editingNameId;
+    const name = editingNameDraft.trim();
+    if (!id || !name) {
+      setEditingNameId(null);
+      return;
+    }
+    await updateLibraryItem(id, { name });
+    if (currentItemIdRef.current === id) setFileName(name);
+    setEditingNameId(null);
+    await refreshLibrary();
+  }, [editingNameId, editingNameDraft, refreshLibrary]);
+
+  const cancelRename = useCallback(() => {
+    setEditingNameId(null);
+    setEditingNameDraft("");
+  }, []);
+
   const downloadLibraryAudio = useCallback(async (id: string, name: string) => {
     setDownloadingItemId(id);
     try {
