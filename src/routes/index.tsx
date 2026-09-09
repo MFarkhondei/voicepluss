@@ -1306,7 +1306,7 @@ function Index() {
                     <button
                       type="button"
                       onClick={() => setDeleteCandidate(item)}
-                      className="inline-flex size-8-5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                      className="inline-flex size-8.5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                       aria-label={`حذف ${item.name} از پلی‌لیست`}
                       title="حذف از حافظه"
                     >
