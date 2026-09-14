@@ -1264,7 +1264,7 @@ function Index() {
                         aria-label="ویرایش نام فایل"
                       />
                     ) : (
-                      <span className="block truncate text-[13px] font-medium">{item.name}</span>
+                      <span className="block truncate text-[13px] font-medium">{stripExtension(item.name)}</span>
                     )}
                     <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
                       <span>{formatLibraryDate(item.updatedAt)}</span>
