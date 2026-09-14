@@ -109,6 +109,11 @@ function stripExtension(name: string) {
   return name.replace(/\.(mp3|wav|webm|mp4|m4a|ogg|flac|aac|wma|mov|mkv|avi|ogv|3gp|m4v|oga|weba)$/i, "");
 }
 
+function getExtension(name: string) {
+  const idx = name.lastIndexOf(".");
+  return idx > 0 ? name.slice(idx) : "";
+}
+
 function isLowConfidence(c?: number | null) {
   return typeof c === "number" && Number.isFinite(c) && c < LOW_CONFIDENCE;
 }
@@ -534,21 +539,24 @@ function Index() {
 
   const startRename = useCallback((item: LibraryMeta) => {
     setEditingNameId(item.id);
-    setEditingNameDraft(item.name);
+    setEditingNameDraft(stripExtension(item.name));
   }, []);
 
   const saveRename = useCallback(async () => {
     const id = editingNameId;
-    const name = editingNameDraft.trim();
-    if (!id || !name) {
+    const draft = editingNameDraft.trim();
+    if (!id || !draft) {
       setEditingNameId(null);
       return;
     }
+    const originalItem = library.find((i) => i.id === id);
+    const ext = originalItem ? getExtension(originalItem.name) : "";
+    const name = ext ? `${draft}${ext}` : draft;
     await updateLibraryItem(id, { name });
     if (currentItemIdRef.current === id) setFileName(name);
     setEditingNameId(null);
     await refreshLibrary();
-  }, [editingNameId, editingNameDraft, refreshLibrary]);
+  }, [editingNameId, editingNameDraft, library, refreshLibrary]);
 
   const cancelRename = useCallback(() => {
     setEditingNameId(null);
@@ -1279,14 +1287,24 @@ function Index() {
                     <button
                       type="button"
                       onClick={() => void openLibraryItem(item.id)}
-                      disabled={loading || loadingItemId === item.id}
+                      disabled={loading || loadingItemId === item.id || editingNameId === item.id}
                       className={`inline-flex size-8.5 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-60 ${active ? "bg-primary text-primary-foreground" : "bg-surface text-muted-foreground hover:bg-primary hover:text-primary-foreground"}`}
                       aria-label={`بارگذاری ${stripExtension(item.name)}`}
                       title="بارگذاری"
                     >
                       {loadingItemId === item.id ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Play className="size-4" aria-hidden="true" />}
                     </button>
-                    {editingNameId !== item.id && (
+                    {editingNameId === item.id ? (
+                      <button
+                        type="button"
+                        onClick={() => void saveRename()}
+                        className="inline-flex size-8.5 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:opacity-90"
+                        aria-label={`ذخیره نام ${stripExtension(item.name)}`}
+                        title="ذخیره نام"
+                      >
+                        <Check className="size-4" aria-hidden="true" />
+                      </button>
+                    ) : (
                       <button
                         type="button"
                         onClick={() => startRename(item)}
@@ -1300,7 +1318,7 @@ function Index() {
                     <button
                       type="button"
                       onClick={() => void downloadLibraryAudio(item.id, item.name)}
-                      disabled={downloadingItemId === item.id}
+                      disabled={downloadingItemId === item.id || editingNameId === item.id}
                       className="inline-flex size-8.5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent/10 hover:text-accent disabled:opacity-60"
                       aria-label={`دانلود فایل صوتی ${stripExtension(item.name)}`}
                       title="دانلود فایل صوتی"
@@ -1310,7 +1328,8 @@ function Index() {
                     <button
                       type="button"
                       onClick={() => setDeleteCandidate(item)}
-                      className="inline-flex size-8.5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                      disabled={editingNameId === item.id}
+                      className="inline-flex size-8.5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-60"
                       aria-label={`حذف ${stripExtension(item.name)} از پلی‌لیست`}
                       title="حذف از حافظه"
                     >
