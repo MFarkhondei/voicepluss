@@ -1267,6 +1267,8 @@ function Index() {
                           if (e.key === "Escape") { e.preventDefault(); cancelRename(); }
                         }}
                         onBlur={() => void saveRename()}
+                        onClick={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation()}
                         autoFocus
                         className="w-full min-w-0 rounded-md border border-border bg-card px-1.5 py-0.5 text-[13px] font-medium outline-none focus:ring-2 focus:ring-ring"
                         aria-label="ویرایش نام فایل"
