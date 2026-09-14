@@ -539,21 +539,24 @@ function Index() {
 
   const startRename = useCallback((item: LibraryMeta) => {
     setEditingNameId(item.id);
-    setEditingNameDraft(item.name);
+    setEditingNameDraft(stripExtension(item.name));
   }, []);
 
   const saveRename = useCallback(async () => {
     const id = editingNameId;
-    const name = editingNameDraft.trim();
-    if (!id || !name) {
+    const draft = editingNameDraft.trim();
+    if (!id || !draft) {
       setEditingNameId(null);
       return;
     }
+    const originalItem = library.find((i) => i.id === id);
+    const ext = originalItem ? getExtension(originalItem.name) : "";
+    const name = ext ? `${draft}${ext}` : draft;
     await updateLibraryItem(id, { name });
     if (currentItemIdRef.current === id) setFileName(name);
     setEditingNameId(null);
     await refreshLibrary();
-  }, [editingNameId, editingNameDraft, refreshLibrary]);
+  }, [editingNameId, editingNameDraft, library, refreshLibrary]);
 
   const cancelRename = useCallback(() => {
     setEditingNameId(null);
