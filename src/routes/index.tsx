@@ -1287,14 +1287,24 @@ function Index() {
                     <button
                       type="button"
                       onClick={() => void openLibraryItem(item.id)}
-                      disabled={loading || loadingItemId === item.id}
+                      disabled={loading || loadingItemId === item.id || editingNameId === item.id}
                       className={`inline-flex size-8.5 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-60 ${active ? "bg-primary text-primary-foreground" : "bg-surface text-muted-foreground hover:bg-primary hover:text-primary-foreground"}`}
                       aria-label={`بارگذاری ${stripExtension(item.name)}`}
                       title="بارگذاری"
                     >
                       {loadingItemId === item.id ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Play className="size-4" aria-hidden="true" />}
                     </button>
-                    {editingNameId !== item.id && (
+                    {editingNameId === item.id ? (
+                      <button
+                        type="button"
+                        onClick={() => void saveRename()}
+                        className="inline-flex size-8.5 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:opacity-90"
+                        aria-label={`ذخیره نام ${stripExtension(item.name)}`}
+                        title="ذخیره نام"
+                      >
+                        <Check className="size-4" aria-hidden="true" />
+                      </button>
+                    ) : (
                       <button
                         type="button"
                         onClick={() => startRename(item)}
@@ -1308,7 +1318,7 @@ function Index() {
                     <button
                       type="button"
                       onClick={() => void downloadLibraryAudio(item.id, item.name)}
-                      disabled={downloadingItemId === item.id}
+                      disabled={downloadingItemId === item.id || editingNameId === item.id}
                       className="inline-flex size-8.5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent/10 hover:text-accent disabled:opacity-60"
                       aria-label={`دانلود فایل صوتی ${stripExtension(item.name)}`}
                       title="دانلود فایل صوتی"
@@ -1318,7 +1328,8 @@ function Index() {
                     <button
                       type="button"
                       onClick={() => setDeleteCandidate(item)}
-                      className="inline-flex size-8.5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                      disabled={editingNameId === item.id}
+                      className="inline-flex size-8.5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-60"
                       aria-label={`حذف ${stripExtension(item.name)} از پلی‌لیست`}
                       title="حذف از حافظه"
                     >
