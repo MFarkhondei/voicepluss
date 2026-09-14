@@ -1264,7 +1264,7 @@ function Index() {
                         aria-label="ویرایش نام فایل"
                       />
                     ) : (
-                      <span className="block truncate text-[13px] font-medium">{item.name}</span>
+                      <span className="block truncate text-[13px] font-medium">{stripExtension(item.name)}</span>
                     )}
                     <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
                       <span>{formatLibraryDate(item.updatedAt)}</span>
@@ -1281,7 +1281,7 @@ function Index() {
                       onClick={() => void openLibraryItem(item.id)}
                       disabled={loading || loadingItemId === item.id}
                       className={`inline-flex size-8.5 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-60 ${active ? "bg-primary text-primary-foreground" : "bg-surface text-muted-foreground hover:bg-primary hover:text-primary-foreground"}`}
-                      aria-label={`بارگذاری ${item.name}`}
+                      aria-label={`بارگذاری ${stripExtension(item.name)}`}
                       title="بارگذاری"
                     >
                       {loadingItemId === item.id ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Play className="size-4" aria-hidden="true" />}
@@ -1291,7 +1291,7 @@ function Index() {
                         type="button"
                         onClick={() => startRename(item)}
                         className="inline-flex size-8.5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent/10 hover:text-accent"
-                        aria-label={`تغییر نام ${item.name}`}
+                        aria-label={`تغییر نام ${stripExtension(item.name)}`}
                         title="تغییر نام"
                       >
                         <Pencil className="size-4" aria-hidden="true" />
@@ -1302,7 +1302,7 @@ function Index() {
                       onClick={() => void downloadLibraryAudio(item.id, item.name)}
                       disabled={downloadingItemId === item.id}
                       className="inline-flex size-8.5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent/10 hover:text-accent disabled:opacity-60"
-                      aria-label={`دانلود فایل صوتی ${item.name}`}
+                      aria-label={`دانلود فایل صوتی ${stripExtension(item.name)}`}
                       title="دانلود فایل صوتی"
                     >
                       {downloadingItemId === item.id ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Download className="size-4" aria-hidden="true" />}
@@ -1311,7 +1311,7 @@ function Index() {
                       type="button"
                       onClick={() => setDeleteCandidate(item)}
                       className="inline-flex size-8.5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                      aria-label={`حذف ${item.name} از پلی‌لیست`}
+                      aria-label={`حذف ${stripExtension(item.name)} از پلی‌لیست`}
                       title="حذف از حافظه"
                     >
                       <X className="size-4" aria-hidden="true" />
@@ -1329,7 +1329,7 @@ function Index() {
           <AlertDialogHeader>
             <AlertDialogTitle>حذف از پلی‌لیست؟</AlertDialogTitle>
             <AlertDialogDescription>
-              {deleteCandidate ? `فایل «${deleteCandidate.name}» و متن ذخیره‌شدهٔ آن از این دستگاه حذف می‌شود. این عملیات قابل بازگشت نیست.` : ""}
+              {deleteCandidate ? `فایل «${stripExtension(deleteCandidate.name)}» و متن ذخیره‌شدهٔ آن از این دستگاه حذف می‌شود. این عملیات قابل بازگشت نیست.` : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
