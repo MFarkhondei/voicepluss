@@ -344,6 +344,8 @@ function Index() {
   const activeCardRef = useRef<HTMLLIElement | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
   const stopAtRef = useRef<number | null>(null);
+  /** آخرین زمانی که در رابط کاربری نمایش داده شده (برای کم‌کردن رندرهای اضافی) */
+  const lastUiTimeRef = useRef(0);
   const repeatIdxRef = useRef<number | null>(null);
   const repeatDoneRef = useRef(0);
   const playOnlyRef = useRef(false);
