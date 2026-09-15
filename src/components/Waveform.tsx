@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 
 type WaveformProps = {
   peaks: number[];
@@ -22,7 +22,7 @@ function formatTime(sec: number) {
 }
 
 /** نمودار موج واقعی با امکان کلیک و کشیدن (scrub) برای پرش به زمان دلخواه */
-export function Waveform({
+function WaveformImpl({
   peaks,
   progress,
   loading,
@@ -134,7 +134,7 @@ export function Waveform({
             className={
               isPlaceholder
                 ? "flex-1 animate-pulse rounded-full bg-muted-foreground/20"
-                : `flex-1 rounded-full transition-colors ${played ? "bg-primary" : "bg-muted-foreground/40"}`
+                : `flex-1 rounded-full ${played ? "bg-primary" : "bg-muted-foreground/40"}`
             }
             style={{ height: `${Math.max(10, v * 100)}%`, minWidth: "2px" }}
           />
@@ -159,3 +159,6 @@ export function Waveform({
     </div>
   );
 }
+
+// نمودار موج فقط وقتی داده یا موقعیت پخش واقعاً تغییر کند دوباره رسم می‌شود.
+export const Waveform = memo(WaveformImpl);

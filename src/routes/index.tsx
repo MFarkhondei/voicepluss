@@ -344,6 +344,8 @@ function Index() {
   const activeCardRef = useRef<HTMLLIElement | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
   const stopAtRef = useRef<number | null>(null);
+  /** آخرین زمانی که در رابط کاربری نمایش داده شده (برای کم‌کردن رندرهای اضافی) */
+  const lastUiTimeRef = useRef(0);
   const repeatIdxRef = useRef<number | null>(null);
   const repeatDoneRef = useRef(0);
   const playOnlyRef = useRef(false);
@@ -584,7 +586,7 @@ function Index() {
   const rememberProgress = useCallback((time: number) => {
     const id = currentItemIdRef.current;
     if (!id) return;
-    if (Math.abs(time - lastSavedTimeRef.current) < 4) return;
+    if (Math.abs(time - lastSavedTimeRef.current) < 8) return;
     lastSavedTimeRef.current = time;
     void updateLibraryItem(id, { lastTime: time });
   }, []);
@@ -1632,7 +1634,13 @@ function Index() {
             setCurrentTime(stopAt);
             return;
           }
-          setCurrentTime(t);
+          // فایرفاکس timeupdate را خیلی پرتکرار صادر می‌کند؛ هر بار setState
+          // کل صفحه (لیست جمله‌ها، پلی‌لیست و نمودار موج) را دوباره رندر می‌کرد
+          // و پخش تپق می‌زد. فقط وقتی زمان به‌اندازهٔ محسوس تغییر کند آپدیت می‌کنیم.
+          if (Math.abs(t - lastUiTimeRef.current) >= 0.2) {
+            lastUiTimeRef.current = t;
+            setCurrentTime(t);
+          }
           rememberProgress(t);
         }}
         onPlay={() => { setPlaying(true); clearLoadingFor(currentItemIdRef.current); }}
