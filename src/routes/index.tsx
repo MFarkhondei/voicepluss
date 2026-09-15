@@ -1632,7 +1632,13 @@ function Index() {
             setCurrentTime(stopAt);
             return;
           }
-          setCurrentTime(t);
+          // فایرفاکس timeupdate را خیلی پرتکرار صادر می‌کند؛ هر بار setState
+          // کل صفحه (لیست جمله‌ها، پلی‌لیست و نمودار موج) را دوباره رندر می‌کرد
+          // و پخش تپق می‌زد. فقط وقتی زمان به‌اندازهٔ محسوس تغییر کند آپدیت می‌کنیم.
+          if (Math.abs(t - lastUiTimeRef.current) >= 0.2) {
+            lastUiTimeRef.current = t;
+            setCurrentTime(t);
+          }
           rememberProgress(t);
         }}
         onPlay={() => { setPlaying(true); clearLoadingFor(currentItemIdRef.current); }}
