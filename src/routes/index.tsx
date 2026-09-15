@@ -586,7 +586,7 @@ function Index() {
   const rememberProgress = useCallback((time: number) => {
     const id = currentItemIdRef.current;
     if (!id) return;
-    if (Math.abs(time - lastSavedTimeRef.current) < 4) return;
+    if (Math.abs(time - lastSavedTimeRef.current) < 8) return;
     lastSavedTimeRef.current = time;
     void updateLibraryItem(id, { lastTime: time });
   }, []);
