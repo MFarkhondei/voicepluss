@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { startKeepAlive, stopKeepAlive } from "@/lib/backgroundKeepAlive";
 import {
   Mic,
   Square,
@@ -360,6 +361,7 @@ function Index() {
   const lastSavedTimeRef = useRef(0);
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  const [queueLabel, setQueueLabel] = useState<string | null>(null);
   const linkInputRef = useRef<HTMLInputElement | null>(null);
 
   // Loading spinner on a playlist row should stay on until playback actually
@@ -450,6 +452,11 @@ function Index() {
       void releaseWakeLock();
     };
   }, [playing, loading]);
+
+  // ادامهٔ تبدیل در پس‌زمینه (موبایل): تا وقتی کاری در جریان است صدای بی‌صدا پخش می‌شود
+  useEffect(() => {
+    if (!loading && !queueLabel) stopKeepAlive();
+  }, [loading, queueLabel]);
 
   const cancelJob = useCallback(() => { abortRef.current?.abort(); abortRef.current = null; }, []);
   const clearAnalysis = useCallback(() => { setAnalysis(null); setAnalysisMode(null); setAnalysisError(null); }, []);
@@ -811,6 +818,7 @@ function Index() {
   }, [segments, segmentQuery, onlyLowConfidence]);
 
   const send = useCallback(async (blob: Blob, name: string) => {
+    startKeepAlive();
     cancelJob();
     const ac = new AbortController();
     abortRef.current = ac;
@@ -980,7 +988,6 @@ function Index() {
     setPendingFile(file);
   };
 
-  const [queueLabel, setQueueLabel] = useState<string | null>(null);
   const [pendingQueue, setPendingQueue] = useState<File[]>([]);
   const onFiles = async (list?: FileList | null) => {
     const files = list ? Array.from(list) : [];
