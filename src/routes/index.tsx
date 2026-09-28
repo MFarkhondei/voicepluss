@@ -822,7 +822,7 @@ function Index() {
     setSegmentQuery("");
     setOnlyLowConfidence(false);
     setFileName(name);
-    void rememberFile(blob, name);
+    const itemIdP = rememberFile(blob, name);
     setProgressLabel(null);
     setProgressPct(0);
     textLockHRef.current = null;
@@ -881,14 +881,18 @@ function Index() {
       setText(finalText);
       setSegments(allSegments);
       setActiveTab("text");
+      try { await updateLibraryItem(await itemIdP, { text: finalText, segments: allSegments }); void refreshLibrary(); } catch { /* ignore */ }
+      return true;
     } catch (e) {
-      setError(e instanceof Error ? e.message : "خطای ناشناخته");
+      const msg = e instanceof Error ? e.message : "خطای ناشناخته";
+      setError(msg);
+      return msg !== CANCEL_MSG && !ac.signal.aborted;
     } finally {
       setLoading(false);
       setProgressLabel(null);
       if (abortRef.current === ac) abortRef.current = null;
     }
-  }, [language, cancelJob, clearAnalysis, setSourceFromBlob, rememberFile]);
+  }, [language, cancelJob, clearAnalysis, setSourceFromBlob, rememberFile, refreshLibrary]);
 
   // ذخیرهٔ خودکار متن و بخش‌ها روی آیتم فعلی پلی‌لیست
   useEffect(() => {
@@ -974,6 +978,19 @@ function Index() {
     setFileName(file.name);
     setSourceFromBlob(file);
     setPendingFile(file);
+  };
+
+  const [queueLabel, setQueueLabel] = useState<string | null>(null);
+  const onFiles = async (list?: FileList | null) => {
+    const files = list ? Array.from(list) : [];
+    if (files.length <= 1) { onFile(files[0]); return; }
+    setPendingFile(null);
+    for (let i = 0; i < files.length; i++) {
+      setQueueLabel(`فایل ${i + 1} از ${files.length}: ${files[i].name}`);
+      const ok = await send(files[i], files[i].name);
+      if (!ok) break; // لغو توسط کاربر
+    }
+    setQueueLabel(null);
   };
 
   const startTranscription = () => {
@@ -1124,10 +1141,12 @@ function Index() {
               type="file"
               accept="audio/*,video/*,.m4a,.mp3,.wav,.ogg,.webm,.mp4,.mov,.mkv,.avi"
               className="hidden"
+              multiple
               disabled={loading}
-              onChange={(e) => onFile(e.target.files?.[0])}
+              onChange={(e) => { void onFiles(e.target.files); e.target.value = ""; }}
             />
           </label>
+          {queueLabel && <p className="max-w-full truncate text-[12px] text-muted-foreground" aria-live="polite">{queueLabel}</p>}
           <button
             type="button"
             onClick={async () => {
