@@ -981,10 +981,15 @@ function Index() {
   };
 
   const [queueLabel, setQueueLabel] = useState<string | null>(null);
+  const [pendingQueue, setPendingQueue] = useState<File[]>([]);
   const onFiles = async (list?: FileList | null) => {
     const files = list ? Array.from(list) : [];
-    if (files.length <= 1) { onFile(files[0]); return; }
-    setPendingFile(null);
+    if (files.length === 0) return;
+    onFile(files[0]);
+    setPendingQueue(files.length > 1 ? files : []);
+  };
+
+  const runQueue = async (files: File[]) => {
     for (let i = 0; i < files.length; i++) {
       setQueueLabel(`فایل ${i + 1} از ${files.length}: ${files[i].name}`);
       const ok = await send(files[i], files[i].name);
@@ -997,6 +1002,7 @@ function Index() {
     const file = pendingFile;
     if (!file) return;
     setPendingFile(null);
+    if (pendingQueue.length > 1) { const q = pendingQueue; setPendingQueue([]); void runQueue(q); return; }
     void send(file, file.name);
   };
 
@@ -1206,8 +1212,8 @@ function Index() {
           <div className="flex items-center gap-2.5">
             <FileAudio className="size-5 shrink-0 text-accent" aria-hidden="true" />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] font-medium">{pendingFile.name}</p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">{(pendingFile.size / (1024 * 1024)).toFixed(1)} مگابایت — آماده برای تبدیل</p>
+              <p className="truncate text-[13px] font-medium">{pendingQueue.length > 1 ? `${pendingQueue.length} فایل انتخاب شده` : pendingFile.name}</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">{((pendingQueue.length > 1 ? pendingQueue.reduce((a, f) => a + f.size, 0) : pendingFile.size) / (1024 * 1024)).toFixed(1)} مگابایت — آماده برای تبدیل</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
